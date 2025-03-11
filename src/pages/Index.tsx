@@ -7,10 +7,8 @@ import TechnologySection from "@/components/TechnologySection";
 import ImpactSection from "@/components/ImpactSection";
 import CallToActionSection from "@/components/CallToActionSection";
 import Footer from "@/components/Footer";
+import SimulationSection from "@/components/SimulationSection";
 import { useEffect } from "react";
-
-// Import framer-motion for animations
-<lov-add-dependency>framer-motion@^11.0.3</lov-add-dependency>
 
 const Index = () => {
   // Add smooth scrolling for hash links
@@ -41,6 +39,7 @@ const Index = () => {
       <main>
         <HeroSection />
         <OverviewSection />
+        <SimulationSection />
         <BenefitsSection />
         <TechnologySection />
         <ImpactSection />
