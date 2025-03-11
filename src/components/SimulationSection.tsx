@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -47,8 +46,9 @@ const SimulationSection = () => {
   const vehicleCounter = useRef(0);
   const statsUpdateInterval = useRef<NodeJS.Timeout | null>(null);
   const waitTimes = useRef<number[]>([]);
+  const completedVehiclesRef = useRef(0);
+  const throughputTimeWindowRef = useRef<number[]>([]);
 
-  // Set up the canvas and start the simulation
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -56,7 +56,6 @@ const SimulationSection = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Resize canvas to fit container
     const resizeCanvas = () => {
       const container = canvas.parentElement;
       if (container) {
@@ -68,7 +67,6 @@ const SimulationSection = () => {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Set up the stats update interval
     statsUpdateInterval.current = setInterval(() => {
       const currentVehicles = vehicles.length;
       const stoppedCount = vehicles.filter(v => v.waiting).length;
@@ -77,9 +75,13 @@ const SimulationSection = () => {
         ? recentWaitTimes.reduce((a, b) => a + b, 0) / recentWaitTimes.length 
         : 0;
       
+      const now = Date.now();
+      throughputTimeWindowRef.current = throughputTimeWindowRef.current.filter(time => now - time < 60000);
+      const vehiclesPerMinute = throughputTimeWindowRef.current.length;
+      
       setStats({
         averageWaitTime: Math.round(avgWaitTime * 10) / 10,
-        throughput: Math.round((vehicleCounter.current / 60) * 10) / 10,
+        throughput: vehiclesPerMinute,
         totalVehicles: currentVehicles,
         stoppedVehicles: stoppedCount
       });
@@ -90,9 +92,8 @@ const SimulationSection = () => {
       if (statsUpdateInterval.current) clearInterval(statsUpdateInterval.current);
       cancelAnimationFrame(animationRef.current);
     };
-  }, []);
+  }, [vehicles]);
 
-  // Handle traffic light changes
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isRunning) return;
@@ -103,13 +104,11 @@ const SimulationSection = () => {
           let newState = light.state;
           
           if (newTimeLeft <= 0) {
-            // Determine new state
             if (light.state === 'green') {
               newState = 'yellow';
-              newTimeLeft = 3; // Yellow duration is fixed
+              newTimeLeft = 3;
             } else if (light.state === 'yellow') {
               newState = 'red';
-              // Calculate duration based on optimization
               if (optimizationEnabled) {
                 const stoppedInDirection = vehicles.filter(v => 
                   (light.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && v.waiting) ||
@@ -122,7 +121,6 @@ const SimulationSection = () => {
                   (otherLight.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && v.waiting)
                 ).length;
                 
-                // Adjust duration based on traffic
                 let baseDuration = 20;
                 if (algorithmType === 'adaptive') {
                   if (stoppedInOtherDirection > stoppedInDirection * 1.5) {
@@ -131,7 +129,6 @@ const SimulationSection = () => {
                     baseDuration = 15;
                   }
                 } else if (algorithmType === 'predictive') {
-                  // More sophisticated algorithm that accounts for approaching vehicles too
                   const approachingVehicles = vehicles.filter(v => 
                     (otherLight.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && !v.waiting) ||
                     (otherLight.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && !v.waiting)
@@ -139,16 +136,14 @@ const SimulationSection = () => {
                   
                   baseDuration = Math.min(35, Math.max(12, Math.round((stoppedInOtherDirection * 1.2) + (approachingVehicles * 0.3))));
                 } else {
-                  // Fixed time algorithm
                   baseDuration = 20;
                 }
                 
                 newTimeLeft = otherLight.state === 'red' ? baseDuration : otherLight.timeLeft + baseDuration;
               } else {
-                newTimeLeft = 20; // Fixed time if optimization is disabled
+                newTimeLeft = 20;
               }
             } else if (light.state === 'red') {
-              // Check if we should change to green (only if the other light is turning to red)
               const otherLight = prev.find(l => l.direction !== light.direction)!;
               if (otherLight.state === 'yellow') {
                 newState = 'green';
@@ -169,7 +164,6 @@ const SimulationSection = () => {
     return () => clearInterval(interval);
   }, [isRunning, vehicles, optimizationEnabled, algorithmType]);
 
-  // Animation loop
   useEffect(() => {
     if (!canvasRef.current) return;
     
@@ -187,42 +181,29 @@ const SimulationSection = () => {
       const deltaTime = (now - lastFrameTime.current) / 1000;
       lastFrameTime.current = now;
       
-      // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Draw intersection
       const center = { x: canvas.width / 2, y: canvas.height / 2 };
-      const roadWidth = 60; // Slightly wider roads
-      const laneWidth = roadWidth / 2; // Two lanes per direction
+      const roadWidth = 60;
+      const laneWidth = roadWidth / 2;
       
-      // Draw background
       ctx.fillStyle = '#f1f1f1';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Draw grass/terrain
       ctx.fillStyle = '#8db580';
-      // Top left quadrant
       ctx.fillRect(0, 0, center.x - roadWidth, center.y - roadWidth);
-      // Top right quadrant
       ctx.fillRect(center.x + roadWidth, 0, canvas.width - (center.x + roadWidth), center.y - roadWidth);
-      // Bottom left quadrant
       ctx.fillRect(0, center.y + roadWidth, center.x - roadWidth, canvas.height - (center.y + roadWidth));
-      // Bottom right quadrant
       ctx.fillRect(center.x + roadWidth, center.y + roadWidth, canvas.width - (center.x + roadWidth), canvas.height - (center.y + roadWidth));
       
-      // Draw roads (darker asphalt color)
       ctx.fillStyle = '#393939';
-      // Horizontal road
       ctx.fillRect(0, center.y - roadWidth, canvas.width, roadWidth * 2);
-      // Vertical road
       ctx.fillRect(center.x - roadWidth, 0, roadWidth * 2, canvas.height);
       
-      // Draw road edge lines (solid white)
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
       
-      // Horizontal road edges
       ctx.beginPath();
       ctx.moveTo(0, center.y - roadWidth);
       ctx.lineTo(canvas.width, center.y - roadWidth);
@@ -233,7 +214,6 @@ const SimulationSection = () => {
       ctx.lineTo(canvas.width, center.y + roadWidth);
       ctx.stroke();
       
-      // Vertical road edges
       ctx.beginPath();
       ctx.moveTo(center.x - roadWidth, 0);
       ctx.lineTo(center.x - roadWidth, canvas.height);
@@ -244,122 +224,100 @@ const SimulationSection = () => {
       ctx.lineTo(center.x + roadWidth, canvas.height);
       ctx.stroke();
       
-      // Draw lane dividers (dashed yellow)
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 2;
       ctx.setLineDash([10, 10]);
       
-      // Horizontal lane divider
       ctx.beginPath();
       ctx.moveTo(0, center.y);
       ctx.lineTo(canvas.width, center.y);
       ctx.stroke();
       
-      // Vertical lane divider
       ctx.beginPath();
       ctx.moveTo(center.x, 0);
       ctx.lineTo(center.x, canvas.height);
       ctx.stroke();
       
-      // Draw crosswalk stripes
       ctx.setLineDash([]);
       ctx.fillStyle = 'white';
       
-      // Draw horizontal crosswalks (at the edges of the intersection)
       const stripeWidth = 6;
       const stripeGap = 4;
       const crosswalkWidth = 15;
       
-      // Top crosswalk
       for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
         ctx.fillRect(x, center.y - roadWidth - crosswalkWidth, stripeWidth, crosswalkWidth);
       }
       
-      // Bottom crosswalk
       for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
         ctx.fillRect(x, center.y + roadWidth, stripeWidth, crosswalkWidth);
       }
       
-      // Left crosswalk
       for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
         ctx.fillRect(center.x - roadWidth - crosswalkWidth, y, crosswalkWidth, stripeWidth);
       }
       
-      // Right crosswalk
       for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
         ctx.fillRect(center.x + roadWidth, y, crosswalkWidth, stripeWidth);
       }
       
-      // Draw traffic lights - more realistic design
       const nsLight = trafficLights.find(l => l.direction === 'ns')!;
       const ewLight = trafficLights.find(l => l.direction === 'ew')!;
       
       const drawTrafficLight = (x: number, y: number, direction: 'vertical' | 'horizontal', state: 'red' | 'yellow' | 'green') => {
-        // Traffic light housing
         ctx.fillStyle = '#222';
         
         if (direction === 'vertical') {
           ctx.fillRect(x - 7, y - 22, 14, 40);
           
-          // Red light
           ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
           ctx.beginPath();
           ctx.arc(x, y - 15, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Yellow light
           ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
           ctx.beginPath();
           ctx.arc(x, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Green light
           ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
           ctx.beginPath();
           ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Light housing outline
           ctx.strokeStyle = '#111';
           ctx.lineWidth = 1;
           ctx.strokeRect(x - 7, y - 22, 14, 40);
           
-          // Traffic light pole
           ctx.fillStyle = '#333';
           ctx.fillRect(x - 2, y + 18, 4, 15);
         } else {
           ctx.fillRect(x - 22, y - 7, 40, 14);
           
-          // Red light
           ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
           ctx.beginPath();
           ctx.arc(x - 15, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Yellow light
           ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
           ctx.beginPath();
           ctx.arc(x, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Green light
           ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
           ctx.beginPath();
           ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Light housing outline
           ctx.strokeStyle = '#111';
           ctx.lineWidth = 1;
           ctx.strokeRect(x - 22, y - 7, 40, 14);
           
-          // Traffic light pole
           ctx.fillStyle = '#333';
           ctx.fillRect(x + 18, y - 2, 15, 4);
         }
       };
       
-      // North light
       drawTrafficLight(
         center.x + roadWidth + 20, 
         center.y - roadWidth - 20, 
@@ -367,7 +325,6 @@ const SimulationSection = () => {
         nsLight.state
       );
       
-      // South light
       drawTrafficLight(
         center.x - roadWidth - 20, 
         center.y + roadWidth + 20, 
@@ -375,7 +332,6 @@ const SimulationSection = () => {
         nsLight.state
       );
       
-      // East light
       drawTrafficLight(
         center.x + roadWidth + 20, 
         center.y + roadWidth + 20, 
@@ -383,7 +339,6 @@ const SimulationSection = () => {
         ewLight.state
       );
       
-      // West light
       drawTrafficLight(
         center.x - roadWidth - 20, 
         center.y - roadWidth - 20, 
@@ -391,50 +346,47 @@ const SimulationSection = () => {
         ewLight.state
       );
       
-      // Create new vehicles randomly based on density
       if (Math.random() * 100 < density * deltaTime) {
         const direction = ['north', 'south', 'east', 'west'][Math.floor(Math.random() * 4)] as 'north' | 'south' | 'east' | 'west';
         const vehicleType = Math.random() > 0.8 
           ? (Math.random() > 0.5 ? 'truck' : 'bus') 
           : 'car';
         
-        // More serious vehicle colors
         const vehicleColors = [
-          '#1A1F2C', // Dark blue
-          '#403E43', // Charcoal
-          '#221F26', // Dark gray
-          '#8E9196', // Neutral gray
-          '#4A4A4A', // Medium gray
-          '#555555', // Dark gray
+          '#1A1F2C',
+          '#403E43',
+          '#221F26',
+          '#8E9196',
+          '#4A4A4A',
+          '#555555'
         ];
         
-        // Create appropriate lane for the vehicle
-        const lane = Math.floor(Math.random() * 2); // 0 or 1 for left or right lane
+        const lane = Math.floor(Math.random() * 2);
         let position = { x: 0, y: 0 };
         const laneOffset = laneWidth * 0.5 + (lane * laneWidth);
         
         switch (direction) {
-          case 'north': // Moving up from bottom
+          case 'north':
             position = { 
-              x: center.x - laneOffset, 
+              x: center.x + laneOffset,
               y: canvas.height + 20 
             };
             break;
-          case 'south': // Moving down from top
+          case 'south':
             position = { 
-              x: center.x + laneOffset, 
+              x: center.x - laneOffset,
               y: -20 
             };
             break;
-          case 'east': // Moving right from left
+          case 'east':
             position = { 
-              x: -20, 
+              x: -20,
               y: center.y + laneOffset 
             };
             break;
-          case 'west': // Moving left from right
+          case 'west':
             position = { 
-              x: canvas.width + 20, 
+              x: canvas.width + 20,
               y: center.y - laneOffset 
             };
             break;
@@ -453,20 +405,17 @@ const SimulationSection = () => {
         }]);
       }
       
-      // Update and draw vehicles
       setVehicles(prev => {
         return prev.map(vehicle => {
           let { position, speed, waiting, direction, lane } = vehicle;
           const vehicleLength = vehicle.type === 'car' ? 15 : vehicle.type === 'truck' ? 25 : 30;
           const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
           
-          // Check if vehicle should stop at traffic light
           const canPass = (
             (direction === 'north' || direction === 'south') && nsLight.state === 'green' ||
             (direction === 'east' || direction === 'west') && ewLight.state === 'green'
           );
           
-          // Check if vehicle is approaching the intersection
           const approachingIntersection = (
             (direction === 'north' && position.y > center.y + roadWidth && position.y < center.y + roadWidth + 100) ||
             (direction === 'south' && position.y < center.y - roadWidth && position.y > center.y - roadWidth - 100) ||
@@ -474,13 +423,11 @@ const SimulationSection = () => {
             (direction === 'west' && position.x > center.x + roadWidth && position.x < center.x + roadWidth + 100)
           );
           
-          // Check if vehicle is in the intersection
           const inIntersection = (
             position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
             position.y > center.y - roadWidth && position.y < center.y + roadWidth
           );
           
-          // Check for collision with other vehicles
           const vehicleAhead = prev.find(other => {
             if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
             
@@ -498,11 +445,9 @@ const SimulationSection = () => {
             return otherIsAhead && distance < vehicleLength * 2;
           });
           
-          // Update vehicle waiting state
           if (!canPass && approachingIntersection && !inIntersection) {
             waiting = true;
             speed = 0;
-            // Record wait start time if this is the first time waiting
             if (!vehicle.waiting) {
               waitTimes.current.push(0);
             }
@@ -511,119 +456,98 @@ const SimulationSection = () => {
             speed = 0;
           } else {
             if (waiting) {
-              // Record wait time when the vehicle starts moving again
               const waitTime = (Date.now() - vehicle.created) / 1000;
-              if (waitTime > 0.5) { // Ignore very short stops
+              if (waitTime > 0.5) {
                 waitTimes.current[waitTimes.current.length - 1] = waitTime;
               } else {
-                waitTimes.current.pop(); // Remove the last entry if wait was too short
+                waitTimes.current.pop();
               }
             }
             waiting = false;
             speed = 40 + Math.random() * 20;
           }
           
-          // Update position based on direction and lane
           if (!waiting) {
             switch (direction) {
               case 'north':
                 position.y -= speed * deltaTime;
-                // Ensure vehicle stays in its lane
-                position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
+                position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
                 break;
               case 'south':
                 position.y += speed * deltaTime;
-                // Ensure vehicle stays in its lane
-                position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
+                position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
                 break;
               case 'east':
                 position.x += speed * deltaTime;
-                // Ensure vehicle stays in its lane
                 position.y = center.y + (laneWidth * 0.5 + (lane * laneWidth));
                 break;
               case 'west':
                 position.x -= speed * deltaTime;
-                // Ensure vehicle stays in its lane
                 position.y = center.y - (laneWidth * 0.5 + (lane * laneWidth));
                 break;
             }
           }
           
-          // Draw vehicle with proper shadows and details
           ctx.save();
           ctx.translate(position.x, position.y);
           
           if (direction === 'north') {
-            ctx.rotate(Math.PI);
-          } else if (direction === 'east') {
-            ctx.rotate(Math.PI * 0.5);
-          } else if (direction === 'west') {
             ctx.rotate(Math.PI * 1.5);
+          } else if (direction === 'south') {
+            ctx.rotate(Math.PI * 0.5);
+          } else if (direction === 'east') {
+            ctx.rotate(0);
+          } else if (direction === 'west') {
+            ctx.rotate(Math.PI);
           }
           
-          // Shadow
           ctx.fillStyle = 'rgba(0,0,0,0.2)';
           ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, vehicleWidth, vehicleLength);
           
-          // Vehicle body
           ctx.fillStyle = vehicle.color;
           ctx.fillRect(-vehicleWidth / 2, -vehicleLength / 2, vehicleWidth, vehicleLength);
           
-          // Add vehicle details
           if (vehicle.type === 'car') {
-            // Windows
             ctx.fillStyle = '#222222';
             ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 3);
             ctx.fillRect(-vehicleWidth / 2 + 1, vehicleLength / 2 - 6, vehicleWidth - 2, 3);
             
-            // Headlights/taillights
-            if (direction === 'north') {
-              // Taillights (red)
+            if (direction === 'north' || direction === 'south' || direction === 'west') {
               ctx.fillStyle = '#ff3b30';
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
               ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
             } else {
-              // Headlights (white/yellow)
               ctx.fillStyle = '#ffcc00';
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
               ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
             }
           } else if (vehicle.type === 'truck') {
-            // Truck cab
             ctx.fillStyle = '#222222';
             ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 6);
             
-            // Truck cargo area with different shade
             ctx.fillStyle = vehicle.color === '#1A1F2C' ? '#262A37' : '#4E4950';
             ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 10, vehicleWidth - 2, vehicleLength - 13);
             
-            // Headlights/taillights
-            if (direction === 'north') {
-              // Taillights
+            if (direction === 'north' || direction === 'south' || direction === 'west') {
               ctx.fillStyle = '#ff3b30';
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
               ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
             } else {
-              // Headlights
               ctx.fillStyle = '#ffcc00';
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
               ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
             }
           } else {
-            // Bus windows
             ctx.fillStyle = '#222222';
             for (let i = 0; i < 4; i++) {
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 5 + i * 5, vehicleWidth - 2, 3);
             }
             
-            // Headlights/taillights
-            if (direction === 'north') {
-              // Taillights
+            if (direction === 'north' || direction === 'south' || direction === 'west') {
               ctx.fillStyle = '#ff3b30';
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
               ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
             } else {
-              // Headlights
               ctx.fillStyle = '#ffcc00';
               ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
               ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
@@ -632,27 +556,28 @@ const SimulationSection = () => {
           
           ctx.restore();
           
-          // Remove vehicles that have left the canvas
           const outOfBounds = (
             position.x < -50 || position.x > canvas.width + 50 ||
             position.y < -50 || position.y > canvas.height + 50
           );
           
+          if (outOfBounds) {
+            throughputTimeWindowRef.current.push(Date.now());
+            completedVehiclesRef.current++;
+          }
+          
           return outOfBounds ? null : { ...vehicle, position, speed, waiting };
         }).filter(Boolean) as Vehicle[];
       });
       
-      // Draw traffic light timers in a more professional style
       ctx.font = '12px Arial';
       ctx.textAlign = 'center';
       
-      // NS timer
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(center.x - 25, center.y - roadWidth - 40, 50, 20);
       ctx.fillStyle = 'white';
       ctx.fillText(`NS: ${nsLight.timeLeft}s`, center.x, center.y - roadWidth - 25);
       
-      // EW timer
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(center.x + roadWidth + 20, center.y - 10, 50, 20);
       ctx.fillStyle = 'white';
@@ -664,7 +589,7 @@ const SimulationSection = () => {
     animationRef.current = requestAnimationFrame(animate);
     
     return () => cancelAnimationFrame(animationRef.current);
-  }, [isRunning, optimizationEnabled]);
+  }, [isRunning, optimizationEnabled, algorithmType]);
   
   return (
     <section id="simulation" className="section-container">
