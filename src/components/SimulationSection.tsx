@@ -48,6 +48,7 @@ const SimulationSection = () => {
   const waitTimes = useRef<number[]>([]);
   const completedVehiclesRef = useRef(0);
   const throughputTimeWindowRef = useRef<number[]>([]);
+  const canvasInitialized = useRef(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -61,7 +62,39 @@ const SimulationSection = () => {
       if (container) {
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
+        canvasInitialized.current = true;
+        drawInitialState(ctx, canvas.width, canvas.height);
       }
+    };
+
+    const drawInitialState = (context: CanvasRenderingContext2D, width: number, height: number) => {
+      context.fillStyle = '#f1f1f1';
+      context.fillRect(0, 0, width, height);
+      
+      const center = { x: width / 2, y: height / 2 };
+      const roadWidth = 60;
+      
+      context.fillStyle = '#8db580';
+      context.fillRect(0, 0, center.x - roadWidth, center.y - roadWidth);
+      context.fillRect(center.x + roadWidth, 0, width - (center.x + roadWidth), center.y - roadWidth);
+      context.fillRect(0, center.y + roadWidth, center.x - roadWidth, height - (center.y + roadWidth));
+      context.fillRect(center.x + roadWidth, center.y + roadWidth, width - (center.x + roadWidth), height - (center.y + roadWidth));
+      
+      context.fillStyle = '#393939';
+      context.fillRect(0, center.y - roadWidth, width, roadWidth * 2);
+      context.fillRect(center.x - roadWidth, 0, roadWidth * 2, height);
+      
+      context.strokeStyle = 'white';
+      context.lineWidth = 2;
+      context.beginPath();
+      context.moveTo(0, center.y - roadWidth);
+      context.lineTo(width, center.y - roadWidth);
+      context.stroke();
+      
+      context.font = '16px Arial';
+      context.fillStyle = 'white';
+      context.textAlign = 'center';
+      context.fillText('Simulation initializing...', center.x, center.y);
     };
 
     resizeCanvas();
@@ -92,7 +125,7 @@ const SimulationSection = () => {
       if (statsUpdateInterval.current) clearInterval(statsUpdateInterval.current);
       cancelAnimationFrame(animationRef.current);
     };
-  }, [vehicles]);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -170,6 +203,12 @@ const SimulationSection = () => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    
+    if (!canvasInitialized.current) {
+      canvas.width = canvas.parentElement?.clientWidth || 800;
+      canvas.height = canvas.parentElement?.clientHeight || 600;
+      canvasInitialized.current = true;
+    }
     
     const animate = () => {
       if (!isRunning) {
@@ -592,7 +631,7 @@ const SimulationSection = () => {
   }, [isRunning, optimizationEnabled, algorithmType]);
   
   return (
-    <section id="simulation" className="section-container">
+    <section id="simulation" className="section-container py-20">
       <div className="space-y-6 text-center mb-10">
         <div className="chip bg-accent/10 text-accent inline-block">
           Interactive Simulation
@@ -607,10 +646,11 @@ const SimulationSection = () => {
       <div className="glass-card rounded-2xl overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="col-span-2 p-6">
-            <div className="relative aspect-video rounded-lg overflow-hidden border border-white/20 shadow-xl">
+            <div className="relative aspect-video rounded-lg overflow-hidden border border-white/20 shadow-xl bg-gray-100">
               <canvas 
                 ref={canvasRef} 
                 className="w-full h-full"
+                style={{ display: 'block' }}
               />
               
               <div className="absolute top-4 left-4 flex gap-2">
