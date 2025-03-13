@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -133,13 +132,20 @@ const SimulationSection = () => {
       if (!isRunning) return;
       
       setTrafficLights(prev => {
-        // Count vehicles waiting in each direction for real AI optimization
         const stoppedNS = vehicles.filter(v => 
           (v.direction === 'north' || v.direction === 'south') && v.waiting
         ).length;
         
         const stoppedEW = vehicles.filter(v => 
           (v.direction === 'east' || v.direction === 'west') && v.waiting
+        ).length;
+        
+        const approachingNS = vehicles.filter(v => 
+          (v.direction === 'north' || v.direction === 'south') && !v.waiting
+        ).length;
+        
+        const approachingEW = vehicles.filter(v => 
+          (v.direction === 'east' || v.direction === 'west') && !v.waiting
         ).length;
         
         return prev.map(light => {
@@ -153,33 +159,32 @@ const SimulationSection = () => {
             } else if (light.state === 'yellow') {
               newState = 'red';
               if (optimizationEnabled) {
-                // Apply AI optimization based on selected algorithm
                 let baseDuration = 20;
                 
                 if (algorithmType === 'adaptive') {
-                  // Adaptive: base timing on current stopped vehicles
                   const stoppedInCurrent = light.direction === 'ns' ? stoppedNS : stoppedEW;
                   const stoppedInOther = light.direction === 'ns' ? stoppedEW : stoppedNS;
                   
-                  if (stoppedInOther > stoppedInCurrent * 1.5) {
+                  if (stoppedInOther > 0 && stoppedInOther > stoppedInCurrent) {
                     baseDuration = Math.min(30, Math.max(10, Math.round(stoppedInOther * 1.5)));
-                  } else {
+                  } else if (stoppedInOther > 0) {
                     baseDuration = 15;
+                  } else {
+                    baseDuration = 8;
                   }
                 } else if (algorithmType === 'predictive') {
-                  // Predictive: consider approaching vehicles too
-                  const approachingVehicles = vehicles.filter(v => 
-                    ((light.direction === 'ew' && (v.direction === 'east' || v.direction === 'west')) ||
-                     (light.direction === 'ns' && (v.direction === 'north' || v.direction === 'south'))) && 
-                    !v.waiting
-                  ).length;
+                  const approachingInCurrent = light.direction === 'ns' ? approachingNS : approachingEW;
+                  const approachingInOther = light.direction === 'ns' ? approachingEW : approachingNS;
                   
                   const stoppedInCurrent = light.direction === 'ns' ? stoppedNS : stoppedEW;
                   const stoppedInOther = light.direction === 'ns' ? stoppedEW : stoppedNS;
                   
-                  baseDuration = Math.min(35, Math.max(12, Math.round((stoppedInOther * 1.2) + (approachingVehicles * 0.3))));
+                  if (stoppedInOther > 0 || approachingInOther > 0) {
+                    baseDuration = Math.min(35, Math.max(12, Math.round((stoppedInOther * 1.2) + (approachingInOther * 0.5))));
+                  } else {
+                    baseDuration = 8;
+                  }
                 } else {
-                  // Fixed time
                   baseDuration = 20;
                 }
                 
@@ -369,7 +374,6 @@ const SimulationSection = () => {
         }
       };
       
-      // Draw all four traffic lights correctly
       drawTrafficLight(
         center.x + roadWidth + 20, 
         center.y - roadWidth - 20, 
@@ -544,13 +548,13 @@ const SimulationSection = () => {
           ctx.translate(position.x, position.y);
           
           if (direction === 'north') {
-            ctx.rotate(Math.PI * 0.25);
-          } else if (direction === 'south') {
             ctx.rotate(Math.PI * 1.25);
+          } else if (direction === 'south') {
+            ctx.rotate(Math.PI * 0.25);
           } else if (direction === 'east') {
-            ctx.rotate(Math.PI * 0.75);
-          } else if (direction === 'west') {
             ctx.rotate(Math.PI * 1.75);
+          } else if (direction === 'west') {
+            ctx.rotate(Math.PI * 0.75);
           }
           
           ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -625,7 +629,6 @@ const SimulationSection = () => {
       ctx.font = '12px Arial';
       ctx.textAlign = 'center';
       
-      // Show traffic light timers
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(center.x - 25, center.y - roadWidth - 40, 50, 20);
       ctx.fillStyle = 'white';
@@ -636,12 +639,15 @@ const SimulationSection = () => {
       ctx.fillStyle = 'white';
       ctx.fillText(`EW: ${ewLight.timeLeft}s`, center.x + roadWidth + 45, center.y + 5);
       
-      // Show optimization status
       if (optimizationEnabled) {
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(center.x - 60, 10, 120, 25);
+        ctx.fillRect(center.x - 80, 10, 160, 25);
+        
+        const nsTraffic = vehicles.filter(v => (v.direction === 'north' || v.direction === 'south') && v.waiting).length;
+        const ewTraffic = vehicles.filter(v => (v.direction === 'east' || v.direction === 'west') && v.waiting).length;
+        
         ctx.fillStyle = algorithmType === 'adaptive' ? '#34c759' : algorithmType === 'predictive' ? '#5ac8fa' : '#ffcc00';
-        ctx.fillText(`AI ${algorithmType} active`, center.x, 27);
+        ctx.fillText(`AI ${algorithmType} (NS:${nsTraffic}, EW:${ewTraffic})`, center.x, 27);
       }
       
       animationRef.current = requestAnimationFrame(animate);
