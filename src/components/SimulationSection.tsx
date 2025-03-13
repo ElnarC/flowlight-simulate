@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -132,6 +133,15 @@ const SimulationSection = () => {
       if (!isRunning) return;
       
       setTrafficLights(prev => {
+        // Count vehicles waiting in each direction for real AI optimization
+        const stoppedNS = vehicles.filter(v => 
+          (v.direction === 'north' || v.direction === 'south') && v.waiting
+        ).length;
+        
+        const stoppedEW = vehicles.filter(v => 
+          (v.direction === 'east' || v.direction === 'west') && v.waiting
+        ).length;
+        
         return prev.map(light => {
           let newTimeLeft = light.timeLeft - 1;
           let newState = light.state;
@@ -143,35 +153,37 @@ const SimulationSection = () => {
             } else if (light.state === 'yellow') {
               newState = 'red';
               if (optimizationEnabled) {
-                const stoppedInDirection = vehicles.filter(v => 
-                  (light.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && v.waiting) ||
-                  (light.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && v.waiting)
-                ).length;
-                
-                const otherLight = prev.find(l => l.direction !== light.direction)!;
-                const stoppedInOtherDirection = vehicles.filter(v => 
-                  (otherLight.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && v.waiting) ||
-                  (otherLight.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && v.waiting)
-                ).length;
-                
+                // Apply AI optimization based on selected algorithm
                 let baseDuration = 20;
+                
                 if (algorithmType === 'adaptive') {
-                  if (stoppedInOtherDirection > stoppedInDirection * 1.5) {
-                    baseDuration = Math.min(30, Math.max(10, Math.round(stoppedInOtherDirection * 1.5)));
+                  // Adaptive: base timing on current stopped vehicles
+                  const stoppedInCurrent = light.direction === 'ns' ? stoppedNS : stoppedEW;
+                  const stoppedInOther = light.direction === 'ns' ? stoppedEW : stoppedNS;
+                  
+                  if (stoppedInOther > stoppedInCurrent * 1.5) {
+                    baseDuration = Math.min(30, Math.max(10, Math.round(stoppedInOther * 1.5)));
                   } else {
                     baseDuration = 15;
                   }
                 } else if (algorithmType === 'predictive') {
+                  // Predictive: consider approaching vehicles too
                   const approachingVehicles = vehicles.filter(v => 
-                    (otherLight.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && !v.waiting) ||
-                    (otherLight.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && !v.waiting)
+                    ((light.direction === 'ew' && (v.direction === 'east' || v.direction === 'west')) ||
+                     (light.direction === 'ns' && (v.direction === 'north' || v.direction === 'south'))) && 
+                    !v.waiting
                   ).length;
                   
-                  baseDuration = Math.min(35, Math.max(12, Math.round((stoppedInOtherDirection * 1.2) + (approachingVehicles * 0.3))));
+                  const stoppedInCurrent = light.direction === 'ns' ? stoppedNS : stoppedEW;
+                  const stoppedInOther = light.direction === 'ns' ? stoppedEW : stoppedNS;
+                  
+                  baseDuration = Math.min(35, Math.max(12, Math.round((stoppedInOther * 1.2) + (approachingVehicles * 0.3))));
                 } else {
+                  // Fixed time
                   baseDuration = 20;
                 }
                 
+                const otherLight = prev.find(l => l.direction !== light.direction)!;
                 newTimeLeft = otherLight.state === 'red' ? baseDuration : otherLight.timeLeft + baseDuration;
               } else {
                 newTimeLeft = 20;
@@ -357,6 +369,7 @@ const SimulationSection = () => {
         }
       };
       
+      // Draw all four traffic lights correctly
       drawTrafficLight(
         center.x + roadWidth + 20, 
         center.y - roadWidth - 20, 
@@ -531,13 +544,13 @@ const SimulationSection = () => {
           ctx.translate(position.x, position.y);
           
           if (direction === 'north') {
-            ctx.rotate(Math.PI * 0);
+            ctx.rotate(Math.PI * 0.25);
           } else if (direction === 'south') {
-            ctx.rotate(Math.PI * 1);
+            ctx.rotate(Math.PI * 1.25);
           } else if (direction === 'east') {
-            ctx.rotate(Math.PI * 0.5);
+            ctx.rotate(Math.PI * 0.75);
           } else if (direction === 'west') {
-            ctx.rotate(Math.PI * 1.5);
+            ctx.rotate(Math.PI * 1.75);
           }
           
           ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -612,6 +625,7 @@ const SimulationSection = () => {
       ctx.font = '12px Arial';
       ctx.textAlign = 'center';
       
+      // Show traffic light timers
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(center.x - 25, center.y - roadWidth - 40, 50, 20);
       ctx.fillStyle = 'white';
@@ -621,6 +635,14 @@ const SimulationSection = () => {
       ctx.fillRect(center.x + roadWidth + 20, center.y - 10, 50, 20);
       ctx.fillStyle = 'white';
       ctx.fillText(`EW: ${ewLight.timeLeft}s`, center.x + roadWidth + 45, center.y + 5);
+      
+      // Show optimization status
+      if (optimizationEnabled) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(center.x - 60, 10, 120, 25);
+        ctx.fillStyle = algorithmType === 'adaptive' ? '#34c759' : algorithmType === 'predictive' ? '#5ac8fa' : '#ffcc00';
+        ctx.fillText(`AI ${algorithmType} active`, center.x, 27);
+      }
       
       animationRef.current = requestAnimationFrame(animate);
     };
