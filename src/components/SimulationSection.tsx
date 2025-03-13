@@ -531,13 +531,13 @@ const SimulationSection = () => {
           ctx.translate(position.x, position.y);
           
           if (direction === 'north') {
-            ctx.rotate(Math.PI * 0.5);
-          } else if (direction === 'south') {
             ctx.rotate(Math.PI * 1.5);
+          } else if (direction === 'south') {
+            ctx.rotate(Math.PI * 0.5);
           } else if (direction === 'east') {
-            ctx.rotate(Math.PI);
-          } else if (direction === 'west') {
             ctx.rotate(0);
+          } else if (direction === 'west') {
+            ctx.rotate(Math.PI);
           }
           
           ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -792,3 +792,4 @@ const SimulationSection = () => {
 };
 
 export default SimulationSection;
+
