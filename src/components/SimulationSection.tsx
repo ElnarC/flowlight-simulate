@@ -705,7 +705,7 @@ const SimulationSection = () => {
       ctx.fillText(`NS: YELLOW (${nsLight.timeLeft}s)`, center.x, center.y - 20);
     } else {
       ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`NS: RED (${nsLight.countdown > 0 ? nsLight.countdown + 's →' : ''})`, center.x, center.y - 20);
+      ctx.fillText(`NS: RED ${nsLight.countdown > 0 ? `(${nsLight.countdown}s →)` : ''}`, center.x, center.y - 20);
     }
     
     // Show EW traffic light status
@@ -717,7 +717,7 @@ const SimulationSection = () => {
       ctx.fillText(`EW: YELLOW (${ewLight.timeLeft}s)`, center.x, center.y);
     } else {
       ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`EW: RED (${ewLight.countdown > 0 ? ewLight.countdown + 's →' : ''})`, center.x, center.y);
+      ctx.fillText(`EW: RED ${ewLight.countdown > 0 ? `(${ewLight.countdown}s →)` : ''}`, center.x, center.y);
     }
   };
   
