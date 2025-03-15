@@ -1,17 +1,49 @@
 
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 
 const OverviewSection = () => {
+  const sectionRef = useRef<HTMLElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          if (entry.target === textRef.current) {
+            textRef.current.querySelectorAll('.animate-on-scroll').forEach((el, index) => {
+              setTimeout(() => {
+                el.classList.add('appear');
+              }, index * 150);
+            });
+          }
+          if (entry.target === videoRef.current) {
+            videoRef.current.classList.add('appear');
+          }
+        }
+      });
+    }, { threshold: 0.2 });
+
+    if (textRef.current) observer.observe(textRef.current);
+    if (videoRef.current) observer.observe(videoRef.current);
+
+    return () => {
+      if (textRef.current) observer.unobserve(textRef.current);
+      if (videoRef.current) observer.unobserve(videoRef.current);
+    };
+  }, []);
+
   return (
-    <section id="overview" className="section-container">
+    <section id="overview" ref={sectionRef} className="section-container">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
-        <div className="space-y-6">
-          <div className="chip bg-secondary text-primary inline-block">
+        <div ref={textRef} className="space-y-6">
+          <div className="chip bg-secondary text-primary inline-block animate-on-scroll fade-in-up">
             Project Overview
           </div>
-          <h2 className="heading-lg">Intelligent Traffic Management System</h2>
-          <p className="text-muted-foreground leading-relaxed">
+          <h2 className="heading-lg animate-on-scroll fade-in-up">Intelligent Traffic Management System</h2>
+          <p className="text-muted-foreground leading-relaxed animate-on-scroll fade-in-up">
             FlowTraffic is a revolutionary 3D traffic intersection simulation that leverages AI algorithms to optimize
             traffic flow in real-time. By dynamically adjusting traffic light timing based on current conditions, 
             we're creating smarter infrastructure that reduces congestion, lowers emissions, and improves economic productivity.
@@ -23,7 +55,7 @@ const OverviewSection = () => {
               'Adaptive response to changing traffic patterns',
               'Data-driven insights for urban planning',
             ].map((item, index) => (
-              <li key={index} className="flex items-start gap-3">
+              <li key={index} className="flex items-start gap-3 animate-on-scroll fade-in-up">
                 <div className="rounded-full p-1 bg-accent/10 text-accent mt-0.5">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
@@ -33,12 +65,12 @@ const OverviewSection = () => {
               </li>
             ))}
           </ul>
-          <Button className="rounded-full mt-4 bg-primary hover:bg-primary/90">
+          <Button className="rounded-full mt-4 bg-primary hover:bg-primary/90 animate-on-scroll fade-in-up">
             Watch the Simulation
           </Button>
         </div>
         
-        <div className="relative">
+        <div ref={videoRef} className="relative fade-in-left">
           <div className="aspect-video rounded-2xl overflow-hidden bg-black/5 glass-card p-1">
             <div className="w-full h-full rounded-xl overflow-hidden relative">
               <video 
