@@ -29,7 +29,6 @@ interface TrafficLight {
   state: LightState;
   duration: number;
   timeLeft: number;
-  countdown: number;
 }
 
 interface SimulationStats {
@@ -49,8 +48,8 @@ const SimulationSection = () => {
   const [isRunning, setIsRunning] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [trafficLights, setTrafficLights] = useState<TrafficLight[]>([
-    { direction: 'ns', state: 'green', duration: 20, timeLeft: 20, countdown: 0 },
-    { direction: 'ew', state: 'red', duration: 20, timeLeft: 0, countdown: 3 }
+    { direction: 'ns', state: 'red', duration: 20, timeLeft: 0 },
+    { direction: 'ew', state: 'green', duration: 20, timeLeft: 20 }
   ]);
   const [density, setDensity] = useState(40);
   const [optimizationEnabled, setOptimizationEnabled] = useState(false);
@@ -259,120 +258,43 @@ const SimulationSection = () => {
         const nsLight = updatedLights.find(l => l.direction === 'ns')!;
         const ewLight = updatedLights.find(l => l.direction === 'ew')!;
         
-        // First, decrement countdown timers for lights in red state
-        if (nsLight.state === 'red' && nsLight.countdown > 0) {
-          nsLight.countdown = Math.max(0, nsLight.countdown - 1);
-        }
+        // NS light always stays red
+        nsLight.state = 'red';
+        nsLight.timeLeft = 20; // Keep a consistent time left value
         
-        if (ewLight.state === 'red' && ewLight.countdown > 0) {
-          ewLight.countdown = Math.max(0, ewLight.countdown - 1);
-        }
-        
-        // Then, decrement timeLeft for all lights
-        nsLight.timeLeft = Math.max(0, nsLight.timeLeft - 1);
+        // Only decrement timeLeft for EW light
         ewLight.timeLeft = Math.max(0, ewLight.timeLeft - 1);
         
-        // Process light transitions
-        if (nsLight.timeLeft === 0) {
-          if (nsLight.state === 'green') {
-            // Green → Yellow
-            nsLight.state = 'yellow';
-            nsLight.timeLeft = 3;
-          } else if (nsLight.state === 'yellow') {
-            // Yellow → Red
-            nsLight.state = 'red';
-            
-            // Set duration based on optimization logic
-            if (optimizationEnabled) {
-              const nsWaiting = vehicles.filter(v => 
-                (v.direction === 'north' || v.direction === 'south') && v.waiting
-              ).length;
-              
-              const ewWaiting = vehicles.filter(v => 
-                (v.direction === 'east' || v.direction === 'west') && v.waiting
-              ).length;
-              
-              if (algorithmType === 'adaptive') {
-                nsLight.timeLeft = Math.max(15, Math.min(30, 15 + Math.floor(ewWaiting / 3)));
-              } else if (algorithmType === 'predictive') {
-                const ewApproaching = vehicles.filter(v => 
-                  (v.direction === 'east' || v.direction === 'west') && !v.waiting
-                ).length;
-                
-                nsLight.timeLeft = Math.max(20, Math.min(35, 20 + Math.floor((ewWaiting + ewApproaching * 0.5) / 3)));
-              } else {
-                nsLight.timeLeft = 20;
-              }
-            } else {
-              nsLight.timeLeft = 20;
-            }
-            
-            // Start countdown for east-west light
-            ewLight.countdown = 3;
-          }
-        }
-        
+        // Only EW light cycles between green and yellow
         if (ewLight.timeLeft === 0) {
           if (ewLight.state === 'green') {
             // Green → Yellow
             ewLight.state = 'yellow';
             ewLight.timeLeft = 3;
           } else if (ewLight.state === 'yellow') {
-            // Yellow → Red
-            ewLight.state = 'red';
+            // Yellow → Green (skip red)
+            ewLight.state = 'green';
             
             // Set duration based on optimization logic
             if (optimizationEnabled) {
-              const nsWaiting = vehicles.filter(v => 
-                (v.direction === 'north' || v.direction === 'south') && v.waiting
-              ).length;
-              
               const ewWaiting = vehicles.filter(v => 
                 (v.direction === 'east' || v.direction === 'west') && v.waiting
               ).length;
               
               if (algorithmType === 'adaptive') {
-                ewLight.timeLeft = Math.max(15, Math.min(30, 15 + Math.floor(nsWaiting / 3)));
+                ewLight.timeLeft = Math.max(15, Math.min(30, 15 + Math.floor(ewWaiting / 3)));
               } else if (algorithmType === 'predictive') {
-                const nsApproaching = vehicles.filter(v => 
-                  (v.direction === 'north' || v.direction === 'south') && !v.waiting
+                const ewApproaching = vehicles.filter(v => 
+                  (v.direction === 'east' || v.direction === 'west') && !v.waiting
                 ).length;
                 
-                ewLight.timeLeft = Math.max(20, Math.min(35, 20 + Math.floor((nsWaiting + nsApproaching * 0.5) / 3)));
+                ewLight.timeLeft = Math.max(20, Math.min(35, 20 + Math.floor((ewWaiting + ewApproaching * 0.5) / 3)));
               } else {
                 ewLight.timeLeft = 20;
               }
             } else {
               ewLight.timeLeft = 20;
             }
-            
-            // Start countdown for north-south light
-            nsLight.countdown = 3;
-          }
-        }
-        
-        // Handle countdown completion (red to green transition)
-        if (nsLight.countdown === 0 && nsLight.state === 'red' && ewLight.state === 'red') {
-          // If both lights are red and NS countdown is complete, make NS green
-          nsLight.state = 'green';
-          nsLight.timeLeft = nsLight.duration;
-        }
-        
-        if (ewLight.countdown === 0 && ewLight.state === 'red' && nsLight.state === 'red') {
-          // If both lights are red and EW countdown is complete, make EW green
-          ewLight.state = 'green';
-          ewLight.timeLeft = ewLight.duration;
-        }
-        
-        // Safety check - never both green at same time
-        if (nsLight.state === 'green' && ewLight.state === 'green') {
-          // If somehow both are green, prioritize the one with more time left
-          if (nsLight.timeLeft >= ewLight.timeLeft) {
-            ewLight.state = 'red';
-            ewLight.timeLeft = nsLight.timeLeft + 3;
-          } else {
-            nsLight.state = 'red';
-            nsLight.timeLeft = ewLight.timeLeft + 3;
           }
         }
         
@@ -548,7 +470,6 @@ const SimulationSection = () => {
       y: number, 
       direction: 'vertical' | 'horizontal', 
       state: LightState, 
-      countdown: number, 
       timeLeft: number
     ) => {
       ctx.fillStyle = '#222';
@@ -575,22 +496,13 @@ const SimulationSection = () => {
         ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Always draw timer box for better visibility
+        // Draw timer box
         ctx.fillStyle = 'black';
         ctx.fillRect(x - 15, y - 40, 30, 15);
         ctx.fillStyle = 'white';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        
-        // Display countdown or timer based on light state
-        if (countdown > 0 && state === 'red') {
-          // Display countdown to green
-          ctx.fillStyle = '#ffcc00';
-          ctx.fillText(`${countdown}s`, x, y - 30);
-        } else {
-          // Display remaining time for current state
-          ctx.fillText(`${timeLeft}s`, x, y - 30);
-        }
+        ctx.fillText(`${timeLeft}s`, x, y - 30);
         
         // Draw border and pole
         ctx.strokeStyle = '#111';
@@ -621,22 +533,13 @@ const SimulationSection = () => {
         ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Always draw timer box for better visibility
+        // Draw timer box
         ctx.fillStyle = 'black';
         ctx.fillRect(x - 42, y - 12, 30, 24);
         ctx.fillStyle = 'white';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        
-        // Display countdown or timer based on light state
-        if (countdown > 0 && state === 'red') {
-          // Display countdown to green
-          ctx.fillStyle = '#ffcc00';
-          ctx.fillText(`${countdown}s`, x - 27, y + 4);
-        } else {
-          // Display remaining time for current state
-          ctx.fillText(`${timeLeft}s`, x - 27, y + 4);
-        }
+        ctx.fillText(`${timeLeft}s`, x - 27, y + 4);
         
         // Draw border and pole
         ctx.strokeStyle = '#111';
@@ -654,7 +557,6 @@ const SimulationSection = () => {
       center.y - roadWidth - 20, 
       'vertical', 
       nsLight.state,
-      nsLight.countdown,
       nsLight.timeLeft
     );
     
@@ -663,7 +565,6 @@ const SimulationSection = () => {
       center.y + roadWidth + 20, 
       'vertical', 
       nsLight.state,
-      nsLight.countdown,
       nsLight.timeLeft
     );
     
@@ -672,7 +573,6 @@ const SimulationSection = () => {
       center.y + roadWidth + 20, 
       'horizontal', 
       ewLight.state,
-      ewLight.countdown,
       ewLight.timeLeft
     );
     
@@ -681,11 +581,10 @@ const SimulationSection = () => {
       center.y - roadWidth - 20, 
       'horizontal', 
       ewLight.state,
-      ewLight.countdown,
       ewLight.timeLeft
     );
     
-    // Draw countdown indicators in the center of the intersection
+    // Draw status information in the center of the intersection
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(center.x - 50, center.y - 60, 100, 50);
     
@@ -705,7 +604,7 @@ const SimulationSection = () => {
       ctx.fillText(`NS: YELLOW (${nsLight.timeLeft}s)`, center.x, center.y - 20);
     } else {
       ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`NS: RED (${nsLight.countdown > 0 ? nsLight.countdown + 's →' : ''})`, center.x, center.y - 20);
+      ctx.fillText(`NS: RED (${nsLight.timeLeft}s)`, center.x, center.y - 20);
     }
     
     // Show EW traffic light status
@@ -717,7 +616,7 @@ const SimulationSection = () => {
       ctx.fillText(`EW: YELLOW (${ewLight.timeLeft}s)`, center.x, center.y);
     } else {
       ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`EW: RED (${ewLight.countdown > 0 ? ewLight.countdown + 's →' : ''})`, center.x, center.y);
+      ctx.fillText(`EW: RED (${ewLight.timeLeft}s)`, center.x, center.y);
     }
   };
   
@@ -808,8 +707,8 @@ const SimulationSection = () => {
         const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
         
         // Determine if vehicle can pass through intersection
+        // Now only east-west vehicles can get a green light
         const canPass = (
-          (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
           (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
         );
         
