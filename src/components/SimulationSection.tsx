@@ -130,6 +130,105 @@ const SimulationSection = () => {
   }, []);
 
   useEffect(() => {
+    if (!isRunning || !optimizationEnabled) return;
+    
+    const optimizationInterval = setInterval(() => {
+      // Get current traffic conditions
+      const nsLight = trafficLights.find(l => l.direction === 'ns')!;
+      const ewLight = trafficLights.find(l => l.direction === 'ew')!;
+      
+      // Count vehicles waiting in each direction
+      const nsWaiting = vehicles.filter(v => 
+        (v.direction === 'north' || v.direction === 'south') && v.waiting
+      ).length;
+      
+      const ewWaiting = vehicles.filter(v => 
+        (v.direction === 'east' || v.direction === 'west') && v.waiting
+      ).length;
+      
+      // Apply optimization based on algorithm type
+      if (algorithmType === 'adaptive') {
+        // Adjust light durations based on waiting vehicles
+        setTrafficLights(prev => {
+          return prev.map(light => {
+            if (light.state !== 'green') return light;
+            
+            let newDuration = light.duration;
+            if (light.direction === 'ns' && nsWaiting < ewWaiting * 0.7) {
+              // Shorten NS green time if few NS vehicles waiting
+              newDuration = Math.max(10, light.duration - 2);
+            } else if (light.direction === 'ew' && ewWaiting < nsWaiting * 0.7) {
+              // Shorten EW green time if few EW vehicles waiting
+              newDuration = Math.max(10, light.duration - 2);
+            } else if (light.direction === 'ns' && nsWaiting > ewWaiting * 1.5) {
+              // Extend NS green time if many NS vehicles waiting
+              newDuration = Math.min(30, light.duration + 3);
+            } else if (light.direction === 'ew' && ewWaiting > nsWaiting * 1.5) {
+              // Extend EW green time if many EW vehicles waiting
+              newDuration = Math.min(30, light.duration + 3);
+            }
+            
+            return {
+              ...light,
+              duration: newDuration,
+              timeLeft: Math.min(newDuration, light.timeLeft)
+            };
+          });
+        });
+      } else if (algorithmType === 'predictive') {
+        // Count approaching vehicles
+        const nsApproaching = vehicles.filter(v => 
+          (v.direction === 'north' || v.direction === 'south') && !v.waiting
+        ).length;
+        
+        const ewApproaching = vehicles.filter(v => 
+          (v.direction === 'east' || v.direction === 'west') && !v.waiting
+        ).length;
+        
+        // Adjust light durations based on approaching and waiting vehicles
+        setTrafficLights(prev => {
+          return prev.map(light => {
+            if (light.state !== 'green') return light;
+            
+            let newDuration = light.duration;
+            if (light.direction === 'ns') {
+              const nsTraffic = nsWaiting * 1.2 + nsApproaching * 0.5;
+              const ewTraffic = ewWaiting * 1.2 + ewApproaching * 0.5;
+              
+              if (nsTraffic < ewTraffic * 0.6) {
+                // Reduce NS green time if EW traffic is heavier
+                newDuration = Math.max(12, light.duration - 3);
+              } else if (nsTraffic > ewTraffic * 1.5) {
+                // Extend NS green time if NS traffic is heavier
+                newDuration = Math.min(35, light.duration + 5);
+              }
+            } else if (light.direction === 'ew') {
+              const nsTraffic = nsWaiting * 1.2 + nsApproaching * 0.5;
+              const ewTraffic = ewWaiting * 1.2 + ewApproaching * 0.5;
+              
+              if (ewTraffic < nsTraffic * 0.6) {
+                // Reduce EW green time if NS traffic is heavier
+                newDuration = Math.max(12, light.duration - 3);
+              } else if (ewTraffic > nsTraffic * 1.5) {
+                // Extend EW green time if EW traffic is heavier
+                newDuration = Math.min(35, light.duration + 5);
+              }
+            }
+            
+            return {
+              ...light,
+              duration: newDuration,
+              timeLeft: Math.min(newDuration, light.timeLeft)
+            };
+          });
+        });
+      }
+    }, 2000); // Check every 2 seconds
+    
+    return () => clearInterval(optimizationInterval);
+  }, [isRunning, optimizationEnabled, algorithmType, vehicles, trafficLights]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       if (!isRunning) return;
       
@@ -188,14 +287,18 @@ const SimulationSection = () => {
               }
             } else if (light.state === 'red') {
               const otherLight = prev.find(l => l.direction !== light.direction)!;
-              if (otherLight.state === 'yellow') {
+              if (otherLight.state === 'yellow' || otherLight.state === 'red') {
                 if (light.countdown > 0) {
                   newCountdown = light.countdown - 1;
                   newState = 'red';
+                  newTimeLeft = 1; // Keep the light red for another second
                 } else {
                   newState = 'green';
                   newTimeLeft = light.duration;
                 }
+              } else {
+                // Keep the light red while the other light is green
+                newTimeLeft = 1;
               }
             }
           }
@@ -340,10 +443,26 @@ const SimulationSection = () => {
           ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          ctx.fillStyle = 'white';
-          ctx.font = '8px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${countdown}`, x, y - 28);
+          // Draw countdown timer
+          if (countdown > 0) {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(x - 10, y - 35, 20, 12);
+            ctx.fillStyle = 'white';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${countdown}`, x, y - 26);
+          } else if (state === 'green') {
+            // Show remaining green time
+            const nsLight = trafficLights.find(l => l.direction === 'ns')!;
+            if (nsLight.state === 'green') {
+              ctx.fillStyle = 'black';
+              ctx.fillRect(x - 10, y - 35, 20, 12);
+              ctx.fillStyle = 'white';
+              ctx.font = '10px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${nsLight.timeLeft}`, x, y - 26);
+            }
+          }
           
           ctx.strokeStyle = '#111';
           ctx.lineWidth = 1;
@@ -369,10 +488,26 @@ const SimulationSection = () => {
           ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          ctx.fillStyle = 'white';
-          ctx.font = '8px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${countdown}`, x - 28, y);
+          // Draw countdown timer
+          if (countdown > 0) {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(x - 35, y - 10, 12, 20);
+            ctx.fillStyle = 'white';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${countdown}`, x - 29, y + 4);
+          } else if (state === 'green') {
+            // Show remaining green time
+            const ewLight = trafficLights.find(l => l.direction === 'ew')!;
+            if (ewLight.state === 'green') {
+              ctx.fillStyle = 'black';
+              ctx.fillRect(x - 35, y - 10, 12, 20);
+              ctx.fillStyle = 'white';
+              ctx.font = '10px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${ewLight.timeLeft}`, x - 29, y + 4);
+            }
+          }
           
           ctx.strokeStyle = '#111';
           ctx.lineWidth = 1;
@@ -414,6 +549,37 @@ const SimulationSection = () => {
         ewLight.state,
         ewLight.countdown
       );
+      
+      // Draw countdown indicators in the center of the intersection
+      if (nsLight.state === 'green' && nsLight.timeLeft <= 5) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(center.x - 15, center.y - 45, 30, 30);
+        ctx.fillStyle = '#34c759';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${nsLight.timeLeft}`, center.x, center.y - 25);
+      } else if (ewLight.state === 'green' && ewLight.timeLeft <= 5) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(center.x - 15, center.y - 45, 30, 30);
+        ctx.fillStyle = '#34c759';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${ewLight.timeLeft}`, center.x, center.y - 25);
+      } else if (nsLight.countdown > 0) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(center.x - 15, center.y - 45, 30, 30);
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${nsLight.countdown}`, center.x, center.y - 25);
+      } else if (ewLight.countdown > 0) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(center.x - 15, center.y - 45, 30, 30);
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${ewLight.countdown}`, center.x, center.y - 25);
+      }
       
       if (Math.random() * 100 < density * deltaTime) {
         const direction = ['north', 'south', 'east', 'west'][Math.floor(Math.random() * 4)] as 'north' | 'south' | 'east' | 'west';
@@ -481,8 +647,8 @@ const SimulationSection = () => {
           const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
           
           const canPass = (
-            (direction === 'north' || direction === 'south') && nsLight.state === 'green' ||
-            (direction === 'east' || direction === 'west') && ewLight.state === 'green'
+            (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
+            (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
           );
           
           const approachingIntersection = (
