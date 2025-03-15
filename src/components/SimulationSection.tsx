@@ -1061,62 +1061,8 @@ const SimulationSection = () => {
     ctx.restore();
   };
   
-  // Draw stats overlay
-  const drawStatsOverlay = (
-    ctx: CanvasRenderingContext2D, 
-    canvasWidth: number, 
-    canvasHeight: number, 
-    nsLight: TrafficLight, 
-    ewLight: TrafficLight
-  ) => {
-    const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
-    const roadWidth = 60;
+ 
     
-    // Draw stats at the top left with modern design
-    const padding = 20;
-    const statsWidth = 180;
-    const statsHeight = 90;
-    const cornerRadius = 12;
-    
-    // Draw rounded rectangle background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-    ctx.beginPath();
-    ctx.moveTo(padding + cornerRadius, padding);
-    ctx.arcTo(padding + statsWidth, padding, padding + statsWidth, padding + cornerRadius, cornerRadius);
-    ctx.arcTo(padding + statsWidth, padding + statsHeight, padding + statsWidth - cornerRadius, padding + statsHeight, cornerRadius);
-    ctx.arcTo(padding, padding + statsHeight, padding, padding + statsHeight - cornerRadius, cornerRadius);
-    ctx.arcTo(padding, padding, padding + cornerRadius, padding, cornerRadius);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Add subtle glow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 15;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 5;
-    
-    // Add title
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 14px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('TRAFFIC STATISTICS', padding + statsWidth/2, padding + 20);
-    
-    // Draw divider line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padding + 20, padding + 30);
-    ctx.lineTo(padding + statsWidth - 20, padding + 30);
-    ctx.stroke();
-    
-    // Display statistics with modern font
-    ctx.textAlign = 'left';
-    ctx.font = '14px Arial';
-    
-    // Vehicle counts
-    ctx.fillText(`Vehicles: ${stats.totalVehicles}`, padding + 20, padding + 50);
-    ctx.fillText(`Stopped: ${stats.stoppedVehicles}`, padding + 20, padding + 70);
   };
   
   // UI control handlers with immediate effect
@@ -1286,6 +1232,5 @@ const SimulationSection = () => {
       </div>
     </section>
   );
-};
 
 export default SimulationSection;
