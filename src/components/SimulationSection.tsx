@@ -51,6 +51,7 @@ const SimulationSection = () => {
   const completedVehiclesRef = useRef(0);
   const throughputTimeWindowRef = useRef<number[]>([]);
   const canvasInitialized = useRef(false);
+  const lastLightUpdateTime = useRef(Date.now());
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -228,124 +229,97 @@ const SimulationSection = () => {
     return () => clearInterval(optimizationInterval);
   }, [isRunning, optimizationEnabled, algorithmType, vehicles, trafficLights]);
 
+  // Traffic light timing logic
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isRunning) return;
+    if (!isRunning) return;
+    
+    const updateTrafficLights = () => {
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - lastLightUpdateTime.current) / 1000);
+      
+      if (elapsedSeconds < 1) return; // Only update every second
+      
+      lastLightUpdateTime.current = now;
       
       setTrafficLights(prev => {
-        // First, find the current state of both lights
-        const nsLight = prev.find(l => l.direction === 'ns')!;
-        const ewLight = prev.find(l => l.direction === 'ew')!;
+        // Create a deep copy to avoid mutation issues
+        const updatedLights = JSON.parse(JSON.stringify(prev)) as TrafficLight[];
         
-        // Create a copy of the lights to modify
-        let updatedLights = [...prev];
+        // Get references to both lights
+        const nsLight = updatedLights.find(l => l.direction === 'ns')!;
+        const ewLight = updatedLights.find(l => l.direction === 'ew')!;
         
-        // Process countdown for lights that are red with countdown > 0
-        updatedLights = updatedLights.map(light => {
+        // First, decrement countdown timers for lights in red state with active countdown
+        updatedLights.forEach(light => {
           if (light.state === 'red' && light.countdown > 0) {
-            return {
-              ...light,
-              countdown: light.countdown - 1
-            };
+            light.countdown -= 1;
           }
-          return light;
         });
         
-        // Process light state transitions
-        updatedLights = updatedLights.map(light => {
-          let newTimeLeft = light.timeLeft - 1;
-          let newState = light.state;
-          let newCountdown = light.countdown;
-          
-          if (newTimeLeft <= 0) {
+        // Then, decrement timeLeft for all lights
+        updatedLights.forEach(light => {
+          light.timeLeft = Math.max(0, light.timeLeft - 1);
+        });
+        
+        // Process state transitions based on timeLeft
+        updatedLights.forEach(light => {
+          if (light.timeLeft === 0) {
             if (light.state === 'green') {
               // Green → Yellow transition
-              newState = 'yellow';
-              newTimeLeft = 3;
+              light.state = 'yellow';
+              light.timeLeft = 3; // Yellow duration is fixed at 3 seconds
             } else if (light.state === 'yellow') {
               // Yellow → Red transition
-              newState = 'red';
+              light.state = 'red';
               
-              // Calculate duration for the red state
-              if (optimizationEnabled) {
-                const stoppedInDirection = vehicles.filter(v => 
-                  (light.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && v.waiting) ||
-                  (light.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && v.waiting)
-                ).length;
-                
-                const otherLight = updatedLights.find(l => l.direction !== light.direction)!;
-                const stoppedInOtherDirection = vehicles.filter(v => 
-                  (otherLight.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && v.waiting) ||
-                  (otherLight.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && v.waiting)
-                ).length;
-                
-                let baseDuration = 20;
-                if (algorithmType === 'adaptive') {
-                  if (stoppedInOtherDirection > stoppedInDirection * 1.5) {
-                    baseDuration = Math.min(30, Math.max(10, Math.round(stoppedInOtherDirection * 1.5)));
-                  } else {
-                    baseDuration = 15;
-                  }
-                } else if (algorithmType === 'predictive') {
-                  const approachingVehicles = vehicles.filter(v => 
-                    (otherLight.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && !v.waiting) ||
-                    (otherLight.direction === 'ew' && (v.direction === 'east' || v.direction === 'west') && !v.waiting)
-                  ).length;
-                  
-                  baseDuration = Math.min(35, Math.max(12, Math.round((stoppedInOtherDirection * 1.2) + (approachingVehicles * 0.3))));
-                } else {
-                  baseDuration = 20;
-                }
-                
-                newTimeLeft = otherLight.state === 'red' ? baseDuration : otherLight.timeLeft + baseDuration;
-              } else {
-                newTimeLeft = 20;
-              }
-              
-              // Set countdown for the other light if it's red
+              // The other light should prepare to turn green
               const otherLight = updatedLights.find(l => l.direction !== light.direction)!;
+              
+              // Set countdown for this light based on the other light's state
               if (otherLight.state === 'red') {
-                // Set countdown for the other light to turn green
-                const otherLightIndex = updatedLights.findIndex(l => l.direction !== light.direction);
-                if (otherLightIndex !== -1) {
-                  updatedLights[otherLightIndex] = {
-                    ...otherLight,
-                    countdown: 3
-                  };
-                }
+                // If other light is already red, this is an error state - fix it
+                otherLight.countdown = 3; // Start countdown for other light to turn green
+                light.timeLeft = otherLight.duration + 3; // This light stays red for the duration of other light's green + yellow
+              } else {
+                // Normal case: other light is yellow or green
+                light.timeLeft = otherLight.timeLeft + (otherLight.state === 'green' ? 3 : 0); // Stay red until other light finishes its cycle
               }
-            } else if (light.state === 'red') {
+            } else if (light.state === 'red' && light.countdown === 0) {
+              // Red → Green transition (only if countdown has reached zero)
               const otherLight = updatedLights.find(l => l.direction !== light.direction)!;
               
-              // Check if this light should turn green
-              if (light.countdown > 0) {
-                // Still counting down before turning green
-                newTimeLeft = 1; // Keep the light red for another second
-              } else if (otherLight.state === 'red' || otherLight.state === 'yellow') {
-                // The other light is red or yellow, so this one can turn green
-                newState = 'green';
-                newTimeLeft = light.duration;
+              if (otherLight.state === 'red' || otherLight.state === 'yellow' && otherLight.timeLeft === 0) {
+                // Only turn green if the other light is red or just finished being yellow
+                light.state = 'green';
+                light.timeLeft = light.duration;
               } else {
-                // The other light is still green, so stay red
-                newTimeLeft = 1; // Check again in 1 second
+                // The other light is still active, so stay red
+                light.timeLeft = 1; // Check again in 1 second
               }
             }
           }
-          
-          return {
-            ...light,
-            state: newState,
-            timeLeft: newTimeLeft,
-            countdown: newCountdown
-          };
         });
+        
+        // Ensure lights are in a valid state (never both green at the same time)
+        if (nsLight.state === 'green' && ewLight.state === 'green') {
+          // This should never happen, but if it does, fix it
+          if (nsLight.timeLeft >= ewLight.timeLeft) {
+            ewLight.state = 'red';
+            ewLight.timeLeft = nsLight.timeLeft + 3; // +3 for yellow phase
+          } else {
+            nsLight.state = 'red';
+            nsLight.timeLeft = ewLight.timeLeft + 3; // +3 for yellow phase
+          }
+        }
         
         return updatedLights;
       });
-    }, 1000);
+    };
+    
+    const interval = setInterval(updateTrafficLights, 200); // Check frequently but only update every second
     
     return () => clearInterval(interval);
-  }, [isRunning, vehicles, optimizationEnabled, algorithmType]);
+  }, [isRunning]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -453,7 +427,7 @@ const SimulationSection = () => {
       const nsLight = trafficLights.find(l => l.direction === 'ns')!;
       const ewLight = trafficLights.find(l => l.direction === 'ew')!;
       
-      const drawTrafficLight = (x: number, y: number, direction: 'vertical' | 'horizontal', state: 'red' | 'yellow' | 'green', countdown: number) => {
+      const drawTrafficLight = (x: number, y: number, direction: 'vertical' | 'horizontal', state: 'red' | 'yellow' | 'green', countdown: number, timeLeft: number) => {
         ctx.fillStyle = '#222';
         
         if (direction === 'vertical') {
@@ -474,7 +448,7 @@ const SimulationSection = () => {
           ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Draw countdown timer
+          // Draw countdown timer or remaining time
           if (countdown > 0) {
             ctx.fillStyle = 'black';
             ctx.fillRect(x - 10, y - 35, 20, 12);
@@ -483,16 +457,12 @@ const SimulationSection = () => {
             ctx.textAlign = 'center';
             ctx.fillText(`${countdown}`, x, y - 26);
           } else if (state === 'green') {
-            // Show remaining green time
-            const nsLight = trafficLights.find(l => l.direction === 'ns')!;
-            if (nsLight.state === 'green') {
-              ctx.fillStyle = 'black';
-              ctx.fillRect(x - 10, y - 35, 20, 12);
-              ctx.fillStyle = 'white';
-              ctx.font = '10px Arial';
-              ctx.textAlign = 'center';
-              ctx.fillText(`${nsLight.timeLeft}`, x, y - 26);
-            }
+            ctx.fillStyle = 'black';
+            ctx.fillRect(x - 10, y - 35, 20, 12);
+            ctx.fillStyle = 'white';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${timeLeft}`, x, y - 26);
           }
           
           ctx.strokeStyle = '#111';
@@ -519,7 +489,7 @@ const SimulationSection = () => {
           ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
-          // Draw countdown timer
+          // Draw countdown timer or remaining time
           if (countdown > 0) {
             ctx.fillStyle = 'black';
             ctx.fillRect(x - 35, y - 10, 12, 20);
@@ -528,16 +498,12 @@ const SimulationSection = () => {
             ctx.textAlign = 'center';
             ctx.fillText(`${countdown}`, x - 29, y + 4);
           } else if (state === 'green') {
-            // Show remaining green time
-            const ewLight = trafficLights.find(l => l.direction === 'ew')!;
-            if (ewLight.state === 'green') {
-              ctx.fillStyle = 'black';
-              ctx.fillRect(x - 35, y - 10, 12, 20);
-              ctx.fillStyle = 'white';
-              ctx.font = '10px Arial';
-              ctx.textAlign = 'center';
-              ctx.fillText(`${ewLight.timeLeft}`, x - 29, y + 4);
-            }
+            ctx.fillStyle = 'black';
+            ctx.fillRect(x - 35, y - 10, 12, 20);
+            ctx.fillStyle = 'white';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${timeLeft}`, x - 29, y + 4);
           }
           
           ctx.strokeStyle = '#111';
@@ -554,7 +520,8 @@ const SimulationSection = () => {
         center.y - roadWidth - 20, 
         'vertical', 
         nsLight.state,
-        nsLight.countdown
+        nsLight.countdown,
+        nsLight.timeLeft
       );
       
       drawTrafficLight(
@@ -562,7 +529,8 @@ const SimulationSection = () => {
         center.y + roadWidth + 20, 
         'vertical', 
         nsLight.state,
-        nsLight.countdown
+        nsLight.countdown,
+        nsLight.timeLeft
       );
       
       drawTrafficLight(
@@ -570,7 +538,8 @@ const SimulationSection = () => {
         center.y + roadWidth + 20, 
         'horizontal', 
         ewLight.state,
-        ewLight.countdown
+        ewLight.countdown,
+        ewLight.timeLeft
       );
       
       drawTrafficLight(
@@ -578,7 +547,8 @@ const SimulationSection = () => {
         center.y - roadWidth - 20, 
         'horizontal', 
         ewLight.state,
-        ewLight.countdown
+        ewLight.countdown,
+        ewLight.timeLeft
       );
       
       // Draw countdown indicators in the center of the intersection
