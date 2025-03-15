@@ -143,9 +143,12 @@ const SimulationSection = () => {
   
   // Traffic optimization logic
   useEffect(() => {
-    if (!isRunning || !optimizationEnabled) return;
+    if (!isRunning) return;
     
     const optimizationInterval = setInterval(() => {
+      // Skip optimization if it's disabled, but still run the interval
+      if (!optimizationEnabled) return;
+      
       // Get current traffic conditions
       const nsLight = trafficLights.find(l => l.direction === 'ns')!;
       const ewLight = trafficLights.find(l => l.direction === 'ew')!;
@@ -167,7 +170,12 @@ const SimulationSection = () => {
         const activeLight = updatedLights.find(l => l.state === 'green')!;
         
         if (algorithmType === 'fixed') {
-          // Fixed timing - don't adjust durations
+          // Fixed timing - set standard durations
+          if (activeLight.direction === 'ns') {
+            activeLight.duration = 20;
+          } else if (activeLight.direction === 'ew') {
+            activeLight.duration = 20;
+          }
           return updatedLights;
         }
         else if (algorithmType === 'adaptive') {
@@ -181,6 +189,9 @@ const SimulationSection = () => {
             } else if (nsWaiting > ewWaiting * 1.5) {
               // Many more NS vehicles waiting - extend NS green time
               newDuration = Math.min(30, activeLight.duration + 3);
+            } else {
+              // Balanced traffic - standard duration
+              newDuration = 20;
             }
           } else if (activeLight.direction === 'ew') {
             if (ewWaiting < nsWaiting * 0.7) {
@@ -189,10 +200,14 @@ const SimulationSection = () => {
             } else if (ewWaiting > nsWaiting * 1.5) {
               // Many more EW vehicles waiting - extend EW green time
               newDuration = Math.min(30, activeLight.duration + 3);
+            } else {
+              // Balanced traffic - standard duration
+              newDuration = 20;
             }
           }
           
           activeLight.duration = newDuration;
+          activeLight.timeLeft = Math.min(newDuration, activeLight.timeLeft);
           return updatedLights;
         }
         else if (algorithmType === 'predictive') {
@@ -218,6 +233,9 @@ const SimulationSection = () => {
             } else if (nsTraffic > ewTraffic * 1.5) {
               // Much more NS traffic - extend green time
               newDuration = Math.min(35, activeLight.duration + 5);
+            } else {
+              // Balanced traffic - standard duration
+              newDuration = 20;
             }
           } else if (activeLight.direction === 'ew') {
             // Calculate weighted traffic scores
@@ -230,10 +248,14 @@ const SimulationSection = () => {
             } else if (ewTraffic > nsTraffic * 1.5) {
               // Much more EW traffic - extend green time
               newDuration = Math.min(35, activeLight.duration + 5);
+            } else {
+              // Balanced traffic - standard duration
+              newDuration = 20;
             }
           }
           
           activeLight.duration = newDuration;
+          activeLight.timeLeft = Math.min(newDuration, activeLight.timeLeft);
           return updatedLights;
         }
         
@@ -282,8 +304,9 @@ const SimulationSection = () => {
           ewLight.state = 'green';
           
           // Set the duration based on the selected algorithm
-          if (algorithmType === 'fixed') {
+          if (!optimizationEnabled || algorithmType === 'fixed') {
             ewLight.timeLeft = 20; // Fixed time algorithm
+            ewLight.duration = 20;
           } else {
             ewLight.timeLeft = ewLight.duration; // Use the duration set by the optimization algorithms
           }
@@ -302,8 +325,9 @@ const SimulationSection = () => {
           nsLight.state = 'green';
           
           // Set the duration based on the selected algorithm
-          if (algorithmType === 'fixed') {
+          if (!optimizationEnabled || algorithmType === 'fixed') {
             nsLight.timeLeft = 20; // Fixed time algorithm
+            nsLight.duration = 20;
           } else {
             nsLight.timeLeft = nsLight.duration; // Use the duration set by the optimization algorithms
           }
@@ -324,7 +348,7 @@ const SimulationSection = () => {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [isRunning, algorithmType]);
+  }, [isRunning, algorithmType, optimizationEnabled]);
   
   // Main animation loop
   useEffect(() => {
@@ -645,8 +669,12 @@ const SimulationSection = () => {
     ctx.fillText(`${ewLight.timeLeft}s`, width - padding - timerWidth + 65, padding + 80);
   };
   
-  // Generate a new vehicle
+  // Generate a new vehicle - adjust density effect
   const generateVehicle = (canvasWidth: number, canvasHeight: number) => {
+    // Directly link vehicle generation to density setting
+    // Higher density = more vehicles
+    if (Math.random() * 100 > density) return;
+    
     const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
     const roadWidth = 60;
     const laneWidth = roadWidth / 2;
@@ -737,21 +765,31 @@ const SimulationSection = () => {
           (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
         );
         
-        // Check if approaching intersection
+        // Calculate exact distance to intersection
+        let distanceToIntersection = 0;
+        if (direction === 'north') {
+          distanceToIntersection = position.y - (center.y + roadWidth);
+        } else if (direction === 'south') {
+          distanceToIntersection = (center.y - roadWidth) - position.y;
+        } else if (direction === 'east') {
+          distanceToIntersection = (center.x - roadWidth) - position.x;
+        } else if (direction === 'west') {
+          distanceToIntersection = position.x - (center.x + roadWidth);
+        }
+        
+        // Check if approaching intersection - refined logic to stop exactly at intersection
+        const stoppingDistance = 5; // Small buffer so vehicles stop exactly at intersection edge
         const approachingIntersection = (
-          (direction === 'north' && position.y > center.y + roadWidth && position.y < center.y + roadWidth + 100) ||
-          (direction === 'south' && position.y < center.y - roadWidth && position.y > center.y - roadWidth - 100) ||
-          (direction === 'east' && position.x < center.x - roadWidth && position.x > center.x - roadWidth - 100) ||
-          (direction === 'west' && position.x > center.x + roadWidth && position.x < center.x + roadWidth + 100)
+          distanceToIntersection > 0 && distanceToIntersection < 100
         );
         
-        // Check if in intersection
+        // Check if already in intersection
         const inIntersection = (
           position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
           position.y > center.y - roadWidth && position.y < center.y + roadWidth
         );
         
-        // Check for vehicle ahead
+        // Check for vehicle ahead - improved distance calculation
         const vehicleAhead = prev.find(other => {
           if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
           
@@ -771,8 +809,21 @@ const SimulationSection = () => {
         
         // Update vehicle waiting status and speed
         if (!canPass && approachingIntersection && !inIntersection) {
+          // Need to stop at intersection
           waiting = true;
           speed = 0;
+          
+          // Move vehicle exactly to the intersection boundary for clean stopping
+          if (direction === 'north' && distanceToIntersection < stoppingDistance) {
+            position.y = center.y + roadWidth + stoppingDistance;
+          } else if (direction === 'south' && distanceToIntersection < stoppingDistance) {
+            position.y = center.y - roadWidth - stoppingDistance;
+          } else if (direction === 'east' && distanceToIntersection < stoppingDistance) {
+            position.x = center.x - roadWidth - stoppingDistance;
+          } else if (direction === 'west' && distanceToIntersection < stoppingDistance) {
+            position.x = center.x + roadWidth + stoppingDistance;
+          }
+          
           if (!vehicle.waiting) {
             waitTimesRef.current.push(0);
           }
