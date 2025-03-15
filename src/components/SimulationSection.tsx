@@ -517,14 +517,6 @@ const SimulationSection = () => {
         ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw timer box
-        ctx.fillStyle = 'black';
-        ctx.fillRect(x - 15, y - 40, 30, 15);
-        ctx.fillStyle = 'white';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${timeLeft}s`, x, y - 30);
-        
         // Draw border and pole
         ctx.strokeStyle = '#111';
         ctx.lineWidth = 1;
@@ -553,14 +545,6 @@ const SimulationSection = () => {
         ctx.beginPath();
         ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
         ctx.fill();
-        
-        // Draw timer box
-        ctx.fillStyle = 'black';
-        ctx.fillRect(x - 42, y - 12, 30, 24);
-        ctx.fillStyle = 'white';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${timeLeft}s`, x - 27, y + 4);
         
         // Draw border and pole
         ctx.strokeStyle = '#111';
@@ -605,40 +589,60 @@ const SimulationSection = () => {
       ewLight.timeLeft
     );
     
-    // Draw status information in the center of the intersection
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(center.x - 50, center.y - 60, 100, 50);
+    // Draw modern countdown timer in top right corner
+    const padding = 20;
+    const timerWidth = 180;
+    const timerHeight = 90;
+    const cornerRadius = 12;
     
-    ctx.textAlign = 'center';
-    ctx.font = '14px Arial';
+    // Draw rounded rectangle background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.moveTo(width - padding - timerWidth + cornerRadius, padding);
+    ctx.arcTo(width - padding, padding, width - padding, padding + cornerRadius, cornerRadius);
+    ctx.arcTo(width - padding, padding + timerHeight, width - padding - cornerRadius, padding + timerHeight, cornerRadius);
+    ctx.arcTo(width - padding - timerWidth, padding + timerHeight, width - padding - timerWidth, padding + timerHeight - cornerRadius, cornerRadius);
+    ctx.arcTo(width - padding - timerWidth, padding, width - padding - timerWidth + cornerRadius, padding, cornerRadius);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Add subtle glow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 5;
+    
+    // Add title
+    ctx.shadowColor = 'transparent';
     ctx.fillStyle = 'white';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('TRAFFIC SIGNAL', width - padding - timerWidth/2, padding + 20);
     
-    // Show traffic light status
-    ctx.fillText('Traffic Status:', center.x, center.y - 40);
+    // Draw divider line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(width - padding - timerWidth + 20, padding + 30);
+    ctx.lineTo(width - padding - 20, padding + 30);
+    ctx.stroke();
     
-    // Show NS traffic light status
-    if (nsLight.state === 'green') {
-      ctx.fillStyle = '#34c759';
-      ctx.fillText(`NS: GREEN (${nsLight.timeLeft}s)`, center.x, center.y - 20);
-    } else if (nsLight.state === 'yellow') {
-      ctx.fillStyle = '#ffcc00';
-      ctx.fillText(`NS: YELLOW (${nsLight.timeLeft}s)`, center.x, center.y - 20);
-    } else {
-      ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`NS: RED (${nsLight.timeLeft}s)`, center.x, center.y - 20);
-    }
+    // Draw NS timer
+    ctx.fillStyle = nsLight.state === 'green' ? '#34c759' : 
+                   nsLight.state === 'yellow' ? '#ffcc00' : '#ff3b30';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('N/S:', width - padding - timerWidth + 20, padding + 55);
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText(`${nsLight.timeLeft}s`, width - padding - timerWidth + 65, padding + 55);
     
-    // Show EW traffic light status
-    if (ewLight.state === 'green') {
-      ctx.fillStyle = '#34c759';
-      ctx.fillText(`EW: GREEN (${ewLight.timeLeft}s)`, center.x, center.y);
-    } else if (ewLight.state === 'yellow') {
-      ctx.fillStyle = '#ffcc00';
-      ctx.fillText(`EW: YELLOW (${ewLight.timeLeft}s)`, center.x, center.y);
-    } else {
-      ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`EW: RED (${ewLight.timeLeft}s)`, center.x, center.y);
-    }
+    // Draw EW timer
+    ctx.fillStyle = ewLight.state === 'green' ? '#34c759' : 
+                   ewLight.state === 'yellow' ? '#ffcc00' : '#ff3b30';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText('E/W:', width - padding - timerWidth + 20, padding + 80);
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText(`${ewLight.timeLeft}s`, width - padding - timerWidth + 65, padding + 80);
   };
   
   // Generate a new vehicle
@@ -920,17 +924,51 @@ const SimulationSection = () => {
     const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
     const roadWidth = 60;
     
-    // Draw stats at the top
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(10, 10, 180, 90);
+    // Draw stats at the top left with modern design
+    const padding = 20;
+    const statsWidth = 180;
+    const statsHeight = 90;
+    const cornerRadius = 12;
     
+    // Draw rounded rectangle background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.moveTo(padding + cornerRadius, padding);
+    ctx.arcTo(padding + statsWidth, padding, padding + statsWidth, padding + cornerRadius, cornerRadius);
+    ctx.arcTo(padding + statsWidth, padding + statsHeight, padding + statsWidth - cornerRadius, padding + statsHeight, cornerRadius);
+    ctx.arcTo(padding, padding + statsHeight, padding, padding + statsHeight - cornerRadius, cornerRadius);
+    ctx.arcTo(padding, padding, padding + cornerRadius, padding, cornerRadius);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Add subtle glow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 5;
+    
+    // Add title
+    ctx.shadowColor = 'transparent';
     ctx.fillStyle = 'white';
-    ctx.fillText(`Total Vehicles: ${stats.totalVehicles}`, 20, 30);
-    ctx.fillText(`Stopped: ${stats.stoppedVehicles}`, 20, 50);
-    ctx.fillText(`Avg Wait: ${stats.averageWaitTime}s`, 20, 70);
-    ctx.fillText(`Throughput: ${stats.throughput}/min`, 20, 90);
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('TRAFFIC STATISTICS', padding + statsWidth/2, padding + 20);
+    
+    // Draw divider line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding + 20, padding + 30);
+    ctx.lineTo(padding + statsWidth - 20, padding + 30);
+    ctx.stroke();
+    
+    // Display statistics with modern font
+    ctx.textAlign = 'left';
+    ctx.font = '14px Arial';
+    
+    // Vehicle counts
+    ctx.fillText(`Vehicles: ${stats.totalVehicles}`, padding + 20, padding + 50);
+    ctx.fillText(`Stopped: ${stats.stoppedVehicles}`, padding + 20, padding + 70);
   };
   
   return (
@@ -968,8 +1006,7 @@ const SimulationSection = () => {
               </div>
               
               <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm text-white p-3 text-sm flex justify-between">
-                <div>Vehicles: {stats.totalVehicles} (Stopped: {stats.stoppedVehicles})</div>
-                <div>Avg Wait: {stats.averageWaitTime}s</div>
+                <div>Avg Wait Time: {stats.averageWaitTime}s</div>
                 <div>Throughput: {stats.throughput}/min</div>
               </div>
             </div>
