@@ -48,8 +48,8 @@ const SimulationSection = () => {
   const [isRunning, setIsRunning] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [trafficLights, setTrafficLights] = useState<TrafficLight[]>([
-    { direction: 'ns', state: 'red', duration: 20, timeLeft: 0 },
-    { direction: 'ew', state: 'green', duration: 20, timeLeft: 20 }
+    { direction: 'ns', state: 'green', duration: 20, timeLeft: 20 },
+    { direction: 'ew', state: 'red', duration: 20, timeLeft: 20 }
   ]);
   const [density, setDensity] = useState(40);
   const [optimizationEnabled, setOptimizationEnabled] = useState(false);
@@ -150,6 +150,9 @@ const SimulationSection = () => {
       const nsLight = trafficLights.find(l => l.direction === 'ns')!;
       const ewLight = trafficLights.find(l => l.direction === 'ew')!;
       
+      // Only adjust durations when a light is green (before it cycles)
+      if (nsLight.state !== 'green' && ewLight.state !== 'green') return;
+      
       // Count waiting vehicles in each direction
       const nsWaiting = vehicles.filter(v => 
         (v.direction === 'north' || v.direction === 'south') && v.waiting
@@ -159,85 +162,83 @@ const SimulationSection = () => {
         (v.direction === 'east' || v.direction === 'west') && v.waiting
       ).length;
       
-      if (algorithmType === 'adaptive') {
-        // Adaptive algorithm: adjust light durations based on current waiting vehicles
-        setTrafficLights(prev => {
-          return prev.map(light => {
-            if (light.state !== 'green') return light;
-            
-            let newDuration = light.duration;
-            
-            if (light.direction === 'ns' && nsWaiting < ewWaiting * 0.7) {
+      setTrafficLights(prev => {
+        const updatedLights = [...prev];
+        const activeLight = updatedLights.find(l => l.state === 'green')!;
+        
+        if (algorithmType === 'fixed') {
+          // Fixed timing - don't adjust durations
+          return updatedLights;
+        }
+        else if (algorithmType === 'adaptive') {
+          // Adaptive algorithm: adjust light durations based on current waiting vehicles
+          let newDuration = activeLight.duration;
+          
+          if (activeLight.direction === 'ns') {
+            if (nsWaiting < ewWaiting * 0.7) {
               // Fewer NS vehicles waiting - shorten NS green time
-              newDuration = Math.max(10, light.duration - 2);
-            } else if (light.direction === 'ew' && ewWaiting < nsWaiting * 0.7) {
-              // Fewer EW vehicles waiting - shorten EW green time
-              newDuration = Math.max(10, light.duration - 2);
-            } else if (light.direction === 'ns' && nsWaiting > ewWaiting * 1.5) {
+              newDuration = Math.max(10, activeLight.duration - 2);
+            } else if (nsWaiting > ewWaiting * 1.5) {
               // Many more NS vehicles waiting - extend NS green time
-              newDuration = Math.min(30, light.duration + 3);
-            } else if (light.direction === 'ew' && ewWaiting > nsWaiting * 1.5) {
+              newDuration = Math.min(30, activeLight.duration + 3);
+            }
+          } else if (activeLight.direction === 'ew') {
+            if (ewWaiting < nsWaiting * 0.7) {
+              // Fewer EW vehicles waiting - shorten EW green time
+              newDuration = Math.max(10, activeLight.duration - 2);
+            } else if (ewWaiting > nsWaiting * 1.5) {
               // Many more EW vehicles waiting - extend EW green time
-              newDuration = Math.min(30, light.duration + 3);
+              newDuration = Math.min(30, activeLight.duration + 3);
             }
+          }
+          
+          activeLight.duration = newDuration;
+          return updatedLights;
+        }
+        else if (algorithmType === 'predictive') {
+          // Predictive algorithm: consider both waiting and approaching vehicles
+          const nsApproaching = vehicles.filter(v => 
+            (v.direction === 'north' || v.direction === 'south') && !v.waiting
+          ).length;
+          
+          const ewApproaching = vehicles.filter(v => 
+            (v.direction === 'east' || v.direction === 'west') && !v.waiting
+          ).length;
+          
+          let newDuration = activeLight.duration;
+          
+          if (activeLight.direction === 'ns') {
+            // Calculate weighted traffic scores
+            const nsTraffic = nsWaiting * 1.2 + nsApproaching * 0.5;
+            const ewTraffic = ewWaiting * 1.2 + ewApproaching * 0.5;
             
-            return {
-              ...light,
-              duration: newDuration,
-              timeLeft: Math.min(newDuration, light.timeLeft)
-            };
-          });
-        });
-      } else if (algorithmType === 'predictive') {
-        // Predictive algorithm: consider both waiting and approaching vehicles
-        const nsApproaching = vehicles.filter(v => 
-          (v.direction === 'north' || v.direction === 'south') && !v.waiting
-        ).length;
-        
-        const ewApproaching = vehicles.filter(v => 
-          (v.direction === 'east' || v.direction === 'west') && !v.waiting
-        ).length;
-        
-        setTrafficLights(prev => {
-          return prev.map(light => {
-            if (light.state !== 'green') return light;
-            
-            let newDuration = light.duration;
-            
-            if (light.direction === 'ns') {
-              // Calculate weighted traffic scores
-              const nsTraffic = nsWaiting * 1.2 + nsApproaching * 0.5;
-              const ewTraffic = ewWaiting * 1.2 + ewApproaching * 0.5;
-              
-              if (nsTraffic < ewTraffic * 0.6) {
-                // Much less NS traffic - reduce green time
-                newDuration = Math.max(12, light.duration - 3);
-              } else if (nsTraffic > ewTraffic * 1.5) {
-                // Much more NS traffic - extend green time
-                newDuration = Math.min(35, light.duration + 5);
-              }
-            } else if (light.direction === 'ew') {
-              // Calculate weighted traffic scores
-              const nsTraffic = nsWaiting * 1.2 + nsApproaching * 0.5;
-              const ewTraffic = ewWaiting * 1.2 + ewApproaching * 0.5;
-              
-              if (ewTraffic < nsTraffic * 0.6) {
-                // Much less EW traffic - reduce green time
-                newDuration = Math.max(12, light.duration - 3);
-              } else if (ewTraffic > nsTraffic * 1.5) {
-                // Much more EW traffic - extend green time
-                newDuration = Math.min(35, light.duration + 5);
-              }
+            if (nsTraffic < ewTraffic * 0.6) {
+              // Much less NS traffic - reduce green time
+              newDuration = Math.max(12, activeLight.duration - 3);
+            } else if (nsTraffic > ewTraffic * 1.5) {
+              // Much more NS traffic - extend green time
+              newDuration = Math.min(35, activeLight.duration + 5);
             }
+          } else if (activeLight.direction === 'ew') {
+            // Calculate weighted traffic scores
+            const nsTraffic = nsWaiting * 1.2 + nsApproaching * 0.5;
+            const ewTraffic = ewWaiting * 1.2 + ewApproaching * 0.5;
             
-            return {
-              ...light,
-              duration: newDuration,
-              timeLeft: Math.min(newDuration, light.timeLeft)
-            };
-          });
-        });
-      }
+            if (ewTraffic < nsTraffic * 0.6) {
+              // Much less EW traffic - reduce green time
+              newDuration = Math.max(12, activeLight.duration - 3);
+            } else if (ewTraffic > nsTraffic * 1.5) {
+              // Much more EW traffic - extend green time
+              newDuration = Math.min(35, activeLight.duration + 5);
+            }
+          }
+          
+          activeLight.duration = newDuration;
+          return updatedLights;
+        }
+        
+        return updatedLights;
+      });
     }, 2000); // Check every 2 seconds
     
     return () => clearInterval(optimizationInterval);
@@ -258,43 +259,63 @@ const SimulationSection = () => {
         const nsLight = updatedLights.find(l => l.direction === 'ns')!;
         const ewLight = updatedLights.find(l => l.direction === 'ew')!;
         
-        // NS light always stays red
-        nsLight.state = 'red';
-        nsLight.timeLeft = 20; // Keep a consistent time left value
+        // Decrement timeLeft for all lights
+        if (nsLight.state === 'green' || nsLight.state === 'yellow') {
+          nsLight.timeLeft = Math.max(0, nsLight.timeLeft - 1);
+        }
         
-        // Only decrement timeLeft for EW light
-        ewLight.timeLeft = Math.max(0, ewLight.timeLeft - 1);
+        if (ewLight.state === 'green' || ewLight.state === 'yellow') {
+          ewLight.timeLeft = Math.max(0, ewLight.timeLeft - 1);
+        }
         
-        // Only EW light cycles between green and yellow
-        if (ewLight.timeLeft === 0) {
-          if (ewLight.state === 'green') {
-            // Green → Yellow
-            ewLight.state = 'yellow';
-            ewLight.timeLeft = 3;
-          } else if (ewLight.state === 'yellow') {
-            // Yellow → Green (skip red)
-            ewLight.state = 'green';
-            
-            // Set duration based on optimization logic
-            if (optimizationEnabled) {
-              const ewWaiting = vehicles.filter(v => 
-                (v.direction === 'east' || v.direction === 'west') && v.waiting
-              ).length;
-              
-              if (algorithmType === 'adaptive') {
-                ewLight.timeLeft = Math.max(15, Math.min(30, 15 + Math.floor(ewWaiting / 3)));
-              } else if (algorithmType === 'predictive') {
-                const ewApproaching = vehicles.filter(v => 
-                  (v.direction === 'east' || v.direction === 'west') && !v.waiting
-                ).length;
-                
-                ewLight.timeLeft = Math.max(20, Math.min(35, 20 + Math.floor((ewWaiting + ewApproaching * 0.5) / 3)));
-              } else {
-                ewLight.timeLeft = 20;
-              }
-            } else {
-              ewLight.timeLeft = 20;
-            }
+        // Process light transitions - normal traffic light cycle logic
+        if (nsLight.state === 'green' && nsLight.timeLeft === 0) {
+          // Green → Yellow
+          nsLight.state = 'yellow';
+          nsLight.timeLeft = 3; // Yellow light duration
+        } 
+        else if (nsLight.state === 'yellow' && nsLight.timeLeft === 0) {
+          // Yellow → Red
+          nsLight.state = 'red';
+          
+          // Make east-west light green
+          ewLight.state = 'green';
+          
+          // Set the duration based on the selected algorithm
+          if (algorithmType === 'fixed') {
+            ewLight.timeLeft = 20; // Fixed time algorithm
+          } else {
+            ewLight.timeLeft = ewLight.duration; // Use the duration set by the optimization algorithms
+          }
+        }
+        
+        if (ewLight.state === 'green' && ewLight.timeLeft === 0) {
+          // Green → Yellow
+          ewLight.state = 'yellow';
+          ewLight.timeLeft = 3; // Yellow light duration
+        } 
+        else if (ewLight.state === 'yellow' && ewLight.timeLeft === 0) {
+          // Yellow → Red
+          ewLight.state = 'red';
+          
+          // Make north-south light green
+          nsLight.state = 'green';
+          
+          // Set the duration based on the selected algorithm
+          if (algorithmType === 'fixed') {
+            nsLight.timeLeft = 20; // Fixed time algorithm
+          } else {
+            nsLight.timeLeft = nsLight.duration; // Use the duration set by the optimization algorithms
+          }
+        }
+        
+        // Safety check - never both green at same time
+        if (nsLight.state === 'green' && ewLight.state === 'green') {
+          // If somehow both are green, prioritize the one with more time left
+          if (nsLight.timeLeft >= ewLight.timeLeft) {
+            ewLight.state = 'red';
+          } else {
+            nsLight.state = 'red';
           }
         }
         
@@ -303,7 +324,7 @@ const SimulationSection = () => {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [isRunning, vehicles, optimizationEnabled, algorithmType]);
+  }, [isRunning, algorithmType]);
   
   // Main animation loop
   useEffect(() => {
@@ -707,8 +728,8 @@ const SimulationSection = () => {
         const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
         
         // Determine if vehicle can pass through intersection
-        // Now only east-west vehicles can get a green light
         const canPass = (
+          (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
           (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
         );
         
