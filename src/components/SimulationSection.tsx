@@ -253,23 +253,24 @@ const SimulationSection = () => {
       
       setTrafficLights(prev => {
         // Create a deep copy to avoid issues
-        const updatedLights = structuredClone(prev);
+        const updatedLights = JSON.parse(JSON.stringify(prev));
         
         // Get references to both lights
         const nsLight = updatedLights.find(l => l.direction === 'ns')!;
         const ewLight = updatedLights.find(l => l.direction === 'ew')!;
         
         // First, decrement countdown timers for lights in red state
-        updatedLights.forEach(light => {
-          if (light.state === 'red' && light.countdown > 0) {
-            light.countdown = Math.max(0, light.countdown - 1);
-          }
-        });
+        if (nsLight.state === 'red' && nsLight.countdown > 0) {
+          nsLight.countdown = Math.max(0, nsLight.countdown - 1);
+        }
+        
+        if (ewLight.state === 'red' && ewLight.countdown > 0) {
+          ewLight.countdown = Math.max(0, ewLight.countdown - 1);
+        }
         
         // Then, decrement timeLeft for all lights
-        updatedLights.forEach(light => {
-          light.timeLeft = Math.max(0, light.timeLeft - 1);
-        });
+        nsLight.timeLeft = Math.max(0, nsLight.timeLeft - 1);
+        ewLight.timeLeft = Math.max(0, ewLight.timeLeft - 1);
         
         // Process light transitions
         if (nsLight.timeLeft === 0) {
@@ -574,21 +575,21 @@ const SimulationSection = () => {
         ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw countdown timer or remaining time
-        if (countdown > 0) {
-          ctx.fillStyle = 'black';
-          ctx.fillRect(x - 10, y - 35, 20, 12);
-          ctx.fillStyle = 'white';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${countdown}`, x, y - 26);
-        } else if (state === 'green') {
-          ctx.fillStyle = 'black';
-          ctx.fillRect(x - 10, y - 35, 20, 12);
-          ctx.fillStyle = 'white';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${timeLeft}`, x, y - 26);
+        // Always draw timer box for better visibility
+        ctx.fillStyle = 'black';
+        ctx.fillRect(x - 15, y - 40, 30, 15);
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        
+        // Display countdown or timer based on light state
+        if (countdown > 0 && state === 'red') {
+          // Display countdown to green
+          ctx.fillStyle = '#ffcc00';
+          ctx.fillText(`${countdown}s`, x, y - 30);
+        } else {
+          // Display remaining time for current state
+          ctx.fillText(`${timeLeft}s`, x, y - 30);
         }
         
         // Draw border and pole
@@ -620,21 +621,21 @@ const SimulationSection = () => {
         ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw countdown timer or remaining time
-        if (countdown > 0) {
-          ctx.fillStyle = 'black';
-          ctx.fillRect(x - 35, y - 10, 12, 20);
-          ctx.fillStyle = 'white';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${countdown}`, x - 29, y + 4);
-        } else if (state === 'green') {
-          ctx.fillStyle = 'black';
-          ctx.fillRect(x - 35, y - 10, 12, 20);
-          ctx.fillStyle = 'white';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${timeLeft}`, x - 29, y + 4);
+        // Always draw timer box for better visibility
+        ctx.fillStyle = 'black';
+        ctx.fillRect(x - 42, y - 12, 30, 24);
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        
+        // Display countdown or timer based on light state
+        if (countdown > 0 && state === 'red') {
+          // Display countdown to green
+          ctx.fillStyle = '#ffcc00';
+          ctx.fillText(`${countdown}s`, x - 27, y + 4);
+        } else {
+          // Display remaining time for current state
+          ctx.fillText(`${timeLeft}s`, x - 27, y + 4);
         }
         
         // Draw border and pole
@@ -685,42 +686,38 @@ const SimulationSection = () => {
     );
     
     // Draw countdown indicators in the center of the intersection
-    if (nsLight.state === 'green' && nsLight.timeLeft <= 5) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(center.x - 50, center.y - 60, 100, 50);
+    
+    ctx.textAlign = 'center';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = 'white';
+    
+    // Show traffic light status
+    ctx.fillText('Traffic Status:', center.x, center.y - 40);
+    
+    // Show NS traffic light status
+    if (nsLight.state === 'green') {
       ctx.fillStyle = '#34c759';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${nsLight.timeLeft}`, center.x, center.y - 20);
-      ctx.font = '12px Arial';
-      ctx.fillText('NS', center.x, center.y - 5);
-    } else if (ewLight.state === 'green' && ewLight.timeLeft <= 5) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
+      ctx.fillText(`NS: GREEN (${nsLight.timeLeft}s)`, center.x, center.y - 20);
+    } else if (nsLight.state === 'yellow') {
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillText(`NS: YELLOW (${nsLight.timeLeft}s)`, center.x, center.y - 20);
+    } else {
+      ctx.fillStyle = '#ff3b30';
+      ctx.fillText(`NS: RED (${nsLight.countdown > 0 ? nsLight.countdown + 's →' : ''})`, center.x, center.y - 20);
+    }
+    
+    // Show EW traffic light status
+    if (ewLight.state === 'green') {
       ctx.fillStyle = '#34c759';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${ewLight.timeLeft}`, center.x, center.y - 20);
-      ctx.font = '12px Arial';
-      ctx.fillText('EW', center.x, center.y - 5);
-    } else if (nsLight.countdown > 0) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
+      ctx.fillText(`EW: GREEN (${ewLight.timeLeft}s)`, center.x, center.y);
+    } else if (ewLight.state === 'yellow') {
       ctx.fillStyle = '#ffcc00';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${nsLight.countdown}`, center.x, center.y - 20);
-      ctx.font = '12px Arial';
-      ctx.fillText('NS→', center.x, center.y - 5);
-    } else if (ewLight.countdown > 0) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
-      ctx.fillStyle = '#ffcc00';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${ewLight.countdown}`, center.x, center.y - 20);
-      ctx.font = '12px Arial';
-      ctx.fillText('EW→', center.x, center.y - 5);
+      ctx.fillText(`EW: YELLOW (${ewLight.timeLeft}s)`, center.x, center.y);
+    } else {
+      ctx.fillStyle = '#ff3b30';
+      ctx.fillText(`EW: RED (${ewLight.countdown > 0 ? ewLight.countdown + 's →' : ''})`, center.x, center.y);
     }
   };
   
@@ -1003,33 +1000,17 @@ const SimulationSection = () => {
     const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
     const roadWidth = 60;
     
-    // Draw light timing info
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    
+    // Draw stats at the top
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(center.x - 25, center.y - roadWidth - 40, 50, 20);
+    ctx.fillRect(10, 10, 180, 90);
+    
     ctx.fillStyle = 'white';
-    ctx.fillText(`NS: ${nsLight.timeLeft}s`, center.x, center.y - roadWidth - 25);
-    
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(center.x + roadWidth + 20, center.y - 10, 50, 20);
-    ctx.fillStyle = 'white';
-    ctx.fillText(`EW: ${ewLight.timeLeft}s`, center.x + roadWidth + 45, center.y + 5);
-    
-    if (nsLight.countdown > 0) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(center.x - 25, center.y - roadWidth - 65, 50, 20);
-      ctx.fillStyle = '#ffcc00';
-      ctx.fillText(`Wait: ${nsLight.countdown}s`, center.x, center.y - roadWidth - 50);
-    }
-    
-    if (ewLight.countdown > 0) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(center.x + roadWidth + 20, center.y - 35, 50, 20);
-      ctx.fillStyle = '#ffcc00';
-      ctx.fillText(`Wait: ${ewLight.countdown}s`, center.x + roadWidth + 45, center.y - 20);
-    }
+    ctx.fillText(`Total Vehicles: ${stats.totalVehicles}`, 20, 30);
+    ctx.fillText(`Stopped: ${stats.stoppedVehicles}`, 20, 50);
+    ctx.fillText(`Avg Wait: ${stats.averageWaitTime}s`, 20, 70);
+    ctx.fillText(`Throughput: ${stats.throughput}/min`, 20, 90);
   };
   
   return (
