@@ -4,6 +4,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 
 type Vehicle = {
   id: string;
@@ -22,6 +23,7 @@ type TrafficLight = {
   state: 'red' | 'yellow' | 'green';
   duration: number;
   timeLeft: number;
+  countdown: number;
 };
 
 const SimulationSection = () => {
@@ -30,8 +32,8 @@ const SimulationSection = () => {
   const [isRunning, setIsRunning] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [trafficLights, setTrafficLights] = useState<TrafficLight[]>([
-    { direction: 'ns', state: 'green', duration: 20, timeLeft: 20 },
-    { direction: 'ew', state: 'red', duration: 20, timeLeft: 0 }
+    { direction: 'ns', state: 'green', duration: 20, timeLeft: 20, countdown: 0 },
+    { direction: 'ew', state: 'red', duration: 20, timeLeft: 0, countdown: 3 }
   ]);
   const [density, setDensity] = useState(40);
   const [optimizationEnabled, setOptimizationEnabled] = useState(false);
@@ -135,13 +137,16 @@ const SimulationSection = () => {
         return prev.map(light => {
           let newTimeLeft = light.timeLeft - 1;
           let newState = light.state;
+          let newCountdown = light.countdown;
           
           if (newTimeLeft <= 0) {
             if (light.state === 'green') {
               newState = 'yellow';
               newTimeLeft = 3;
+              newCountdown = 0;
             } else if (light.state === 'yellow') {
               newState = 'red';
+              
               if (optimizationEnabled) {
                 const stoppedInDirection = vehicles.filter(v => 
                   (light.direction === 'ns' && (v.direction === 'north' || v.direction === 'south') && v.waiting) ||
@@ -176,11 +181,21 @@ const SimulationSection = () => {
               } else {
                 newTimeLeft = 20;
               }
+              
+              const otherLight = prev.find(l => l.direction !== light.direction)!;
+              if (otherLight.state === 'red') {
+                newCountdown = 3;
+              }
             } else if (light.state === 'red') {
               const otherLight = prev.find(l => l.direction !== light.direction)!;
               if (otherLight.state === 'yellow') {
-                newState = 'green';
-                newTimeLeft = light.duration;
+                if (light.countdown > 0) {
+                  newCountdown = light.countdown - 1;
+                  newState = 'red';
+                } else {
+                  newState = 'green';
+                  newTimeLeft = light.duration;
+                }
               }
             }
           }
@@ -188,7 +203,8 @@ const SimulationSection = () => {
           return {
             ...light,
             state: newState,
-            timeLeft: newTimeLeft
+            timeLeft: newTimeLeft,
+            countdown: newCountdown
           };
         });
       });
@@ -303,7 +319,7 @@ const SimulationSection = () => {
       const nsLight = trafficLights.find(l => l.direction === 'ns')!;
       const ewLight = trafficLights.find(l => l.direction === 'ew')!;
       
-      const drawTrafficLight = (x: number, y: number, direction: 'vertical' | 'horizontal', state: 'red' | 'yellow' | 'green') => {
+      const drawTrafficLight = (x: number, y: number, direction: 'vertical' | 'horizontal', state: 'red' | 'yellow' | 'green', countdown: number) => {
         ctx.fillStyle = '#222';
         
         if (direction === 'vertical') {
@@ -323,6 +339,11 @@ const SimulationSection = () => {
           ctx.beginPath();
           ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
           ctx.fill();
+          
+          ctx.fillStyle = 'white';
+          ctx.font = '8px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${countdown}`, x, y - 28);
           
           ctx.strokeStyle = '#111';
           ctx.lineWidth = 1;
@@ -348,6 +369,11 @@ const SimulationSection = () => {
           ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
           ctx.fill();
           
+          ctx.fillStyle = 'white';
+          ctx.font = '8px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${countdown}`, x - 28, y);
+          
           ctx.strokeStyle = '#111';
           ctx.lineWidth = 1;
           ctx.strokeRect(x - 22, y - 7, 40, 14);
@@ -361,28 +387,32 @@ const SimulationSection = () => {
         center.x + roadWidth + 20, 
         center.y - roadWidth - 20, 
         'vertical', 
-        nsLight.state
+        nsLight.state,
+        nsLight.countdown
       );
       
       drawTrafficLight(
         center.x - roadWidth - 20, 
         center.y + roadWidth + 20, 
         'vertical', 
-        nsLight.state
+        nsLight.state,
+        nsLight.countdown
       );
       
       drawTrafficLight(
         center.x + roadWidth + 20, 
         center.y + roadWidth + 20, 
         'horizontal', 
-        ewLight.state
+        ewLight.state,
+        ewLight.countdown
       );
       
       drawTrafficLight(
         center.x - roadWidth - 20, 
         center.y - roadWidth - 20, 
         'horizontal', 
-        ewLight.state
+        ewLight.state,
+        ewLight.countdown
       );
       
       if (Math.random() * 100 < density * deltaTime) {
@@ -621,6 +651,20 @@ const SimulationSection = () => {
       ctx.fillRect(center.x + roadWidth + 20, center.y - 10, 50, 20);
       ctx.fillStyle = 'white';
       ctx.fillText(`EW: ${ewLight.timeLeft}s`, center.x + roadWidth + 45, center.y + 5);
+      
+      if (nsLight.countdown > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(center.x - 25, center.y - roadWidth - 65, 50, 20);
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillText(`Wait: ${nsLight.countdown}s`, center.x, center.y - roadWidth - 50);
+      }
+      
+      if (ewLight.countdown > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(center.x + roadWidth + 20, center.y - 35, 50, 20);
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillText(`Wait: ${ewLight.countdown}s`, center.x + roadWidth + 45, center.y - 20);
+      }
       
       animationRef.current = requestAnimationFrame(animate);
     };
