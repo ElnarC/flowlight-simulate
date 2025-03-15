@@ -107,12 +107,8 @@ const SimulationSection = () => {
     
     window.addEventListener('resize', handleResize);
     
-    // Set up stats update interval
-    const statsInterval = setInterval(() => updateStats(), 1000);
-    
     return () => {
       window.removeEventListener('resize', handleResize);
-      clearInterval(statsInterval);
       cancelAnimationFrame(animationFrameId.current);
     };
   }, []);
@@ -491,9 +487,6 @@ const SimulationSection = () => {
       
       // Update and draw vehicles
       updateVehicles(deltaTime, canvas.width, canvas.height, nsLight, ewLight);
-      
-      // Draw stats overlay
-      drawStatsOverlay(ctx, canvas.width, canvas.height, nsLight, ewLight);
       
       // Continue animation loop
       animationFrameId.current = requestAnimationFrame(animate);
