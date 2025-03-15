@@ -705,7 +705,7 @@ const SimulationSection = () => {
       ctx.fillText(`NS: YELLOW (${nsLight.timeLeft}s)`, center.x, center.y - 20);
     } else {
       ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`NS: RED ${nsLight.countdown > 0 ? `(${nsLight.countdown}s →)` : ''}`, center.x, center.y - 20);
+      ctx.fillText(`NS: RED (${nsLight.countdown > 0 ? nsLight.countdown + 's →' : ''})`, center.x, center.y - 20);
     }
     
     // Show EW traffic light status
@@ -717,7 +717,7 @@ const SimulationSection = () => {
       ctx.fillText(`EW: YELLOW (${ewLight.timeLeft}s)`, center.x, center.y);
     } else {
       ctx.fillStyle = '#ff3b30';
-      ctx.fillText(`EW: RED ${ewLight.countdown > 0 ? `(${ewLight.countdown}s →)` : ''}`, center.x, center.y);
+      ctx.fillText(`EW: RED (${ewLight.countdown > 0 ? ewLight.countdown + 's →' : ''})`, center.x, center.y);
     }
   };
   
@@ -807,413 +807,371 @@ const SimulationSection = () => {
         const vehicleLength = vehicle.type === 'car' ? 15 : vehicle.type === 'truck' ? 25 : 30;
         const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
         
-        // Check if vehicle is at a traffic light
-        let shouldStop = false;
-        const distanceToIntersection = 
-          direction === 'north' 
-            ? center.y + roadWidth - position.y
-            : direction === 'south'
-            ? position.y - (center.y - roadWidth)
-            : direction === 'east'
-            ? center.x + roadWidth - position.x
-            : position.x - (center.x - roadWidth);
-        
-        // Determine if vehicle should stop at red/yellow light
-        if (distanceToIntersection > 0 && distanceToIntersection < 50) {
-          if (
-            (direction === 'north' || direction === 'south') && 
-            (nsLight.state === 'red' || (nsLight.state === 'yellow' && distanceToIntersection > 20))
-          ) {
-            shouldStop = true;
-          } else if (
-            (direction === 'east' || direction === 'west') && 
-            (ewLight.state === 'red' || (ewLight.state === 'yellow' && distanceToIntersection > 20))
-          ) {
-            shouldStop = true;
-          }
-        }
-        
-        // Vehicles already waiting at light should continue to wait
-        if (waiting && shouldStop) {
-          speed = 0;
-        } else if (waiting && !shouldStop) {
-          // Vehicle can go now (light changed)
-          waiting = false;
-          speed = vehicle.speed;
-        } else if (!waiting && shouldStop) {
-          // Vehicle needs to stop (approaching red light)
-          waiting = true;
-          speed = 0;
-          
-          // Record wait start time
-          if (!vehicle.waiting) {
-            vehicle.waiting = true;
-          }
-        }
-        
-        // Update position based on direction and speed
-        if (direction === 'north') {
-          position.y -= speed * deltaTime;
-        } else if (direction === 'south') {
-          position.y += speed * deltaTime;
-        } else if (direction === 'east') {
-          position.x += speed * deltaTime;
-        } else if (direction === 'west') {
-          position.x -= speed * deltaTime;
-        }
-        
-        // Record a completed journey and vehicle throughput
-        const isOutOfBounds = 
-          position.x < -50 || 
-          position.x > canvasWidth + 50 || 
-          position.y < -50 || 
-          position.y > canvasHeight + 50;
-        
-        if (isOutOfBounds) {
-          // Vehicle has completed its journey
-          const waitTime = (Date.now() - vehicle.created) / 1000;
-          waitTimesRef.current.push(waitTime);
-          
-          // Keep only last 100 vehicles for stats
-          if (waitTimesRef.current.length > 100) {
-            waitTimesRef.current.shift();
-          }
-          
-          // Record throughput
-          throughputWindowRef.current.push(Date.now());
-          completedVehiclesRef.current++;
-          
-          // Return null to remove this vehicle
-          return null;
-        }
-        
-        // Draw vehicle
-        const isHorizontal = direction === 'east' || direction === 'west';
-        const vehicleHeight = isHorizontal ? vehicleWidth : vehicleLength;
-        const vehicleDisplayWidth = isHorizontal ? vehicleLength : vehicleWidth;
-        
-        ctx.fillStyle = vehicle.color;
-        ctx.fillRect(
-          position.x - vehicleDisplayWidth / 2, 
-          position.y - vehicleHeight / 2, 
-          vehicleDisplayWidth, 
-          vehicleHeight
+        // Determine if vehicle can pass through intersection
+        const canPass = (
+          (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
+          (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
         );
         
-        // Draw headlights and taillights
-        if (isHorizontal) {
-          // Headlights (white)
-          ctx.fillStyle = 'white';
-          if (direction === 'east') {
-            // Headlights on right side
-            ctx.fillRect(
-              position.x + vehicleLength / 2 - 2, 
-              position.y - vehicleWidth / 2 + 2, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x + vehicleLength / 2 - 2, 
-              position.y + vehicleWidth / 2 - 4, 
-              2, 
-              2
-            );
+        // Check if approaching intersection
+        const approachingIntersection = (
+          (direction === 'north' && position.y > center.y + roadWidth && position.y < center.y + roadWidth + 100) ||
+          (direction === 'south' && position.y < center.y - roadWidth && position.y > center.y - roadWidth - 100) ||
+          (direction === 'east' && position.x < center.x - roadWidth && position.x > center.x - roadWidth - 100) ||
+          (direction === 'west' && position.x > center.x + roadWidth && position.x < center.x + roadWidth + 100)
+        );
+        
+        // Check if in intersection
+        const inIntersection = (
+          position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
+          position.y > center.y - roadWidth && position.y < center.y + roadWidth
+        );
+        
+        // Check for vehicle ahead
+        const vehicleAhead = prev.find(other => {
+          if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
+          
+          const distance = direction === 'north' || direction === 'south'
+            ? Math.abs(other.position.y - position.y)
+            : Math.abs(other.position.x - position.x);
             
-            // Taillights (red)
-            ctx.fillStyle = 'red';
-            ctx.fillRect(
-              position.x - vehicleLength / 2 + 1, 
-              position.y - vehicleWidth / 2 + 2, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x - vehicleLength / 2 + 1, 
-              position.y + vehicleWidth / 2 - 4, 
-              2, 
-              2
-            );
-          } else {
-            // Headlights on left side
-            ctx.fillStyle = 'white';
-            ctx.fillRect(
-              position.x - vehicleLength / 2 + 1, 
-              position.y - vehicleWidth / 2 + 2, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x - vehicleLength / 2 + 1, 
-              position.y + vehicleWidth / 2 - 4, 
-              2, 
-              2
-            );
-            
-            // Taillights (red)
-            ctx.fillStyle = 'red';
-            ctx.fillRect(
-              position.x + vehicleLength / 2 - 2, 
-              position.y - vehicleWidth / 2 + 2, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x + vehicleLength / 2 - 2, 
-              position.y + vehicleWidth / 2 - 4, 
-              2, 
-              2
-            );
+          const otherIsAhead = (
+            (direction === 'north' && other.position.y < position.y) ||
+            (direction === 'south' && other.position.y > position.y) ||
+            (direction === 'east' && other.position.x > position.x) ||
+            (direction === 'west' && other.position.x < position.x)
+          );
+          
+          return otherIsAhead && distance < vehicleLength * 2;
+        });
+        
+        // Update vehicle waiting status and speed
+        if (!canPass && approachingIntersection && !inIntersection) {
+          waiting = true;
+          speed = 0;
+          if (!vehicle.waiting) {
+            waitTimesRef.current.push(0);
           }
+        } else if (vehicleAhead) {
+          waiting = true;
+          speed = 0;
         } else {
-          // Vertical vehicles
-          ctx.fillStyle = 'white';
-          if (direction === 'north') {
-            // Headlights on top
-            ctx.fillRect(
-              position.x - vehicleWidth / 2 + 2, 
-              position.y - vehicleLength / 2 + 1, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x + vehicleWidth / 2 - 4, 
-              position.y - vehicleLength / 2 + 1, 
-              2, 
-              2
-            );
-            
-            // Taillights on bottom
-            ctx.fillStyle = 'red';
-            ctx.fillRect(
-              position.x - vehicleWidth / 2 + 2, 
-              position.y + vehicleLength / 2 - 2, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x + vehicleWidth / 2 - 4, 
-              position.y + vehicleLength / 2 - 2, 
-              2, 
-              2
-            );
-          } else {
-            // Headlights on bottom
-            ctx.fillStyle = 'white';
-            ctx.fillRect(
-              position.x - vehicleWidth / 2 + 2, 
-              position.y + vehicleLength / 2 - 2, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x + vehicleWidth / 2 - 4, 
-              position.y + vehicleLength / 2 - 2, 
-              2, 
-              2
-            );
-            
-            // Taillights on top
-            ctx.fillStyle = 'red';
-            ctx.fillRect(
-              position.x - vehicleWidth / 2 + 2, 
-              position.y - vehicleLength / 2 + 1, 
-              2, 
-              2
-            );
-            ctx.fillRect(
-              position.x + vehicleWidth / 2 - 4, 
-              position.y - vehicleLength / 2 + 1, 
-              2, 
-              2
-            );
+          if (waiting) {
+            const waitTime = (Date.now() - vehicle.created) / 1000;
+            if (waitTime > 0.5) {
+              waitTimesRef.current[waitTimesRef.current.length - 1] = waitTime;
+            } else {
+              waitTimesRef.current.pop();
+            }
+          }
+          waiting = false;
+          speed = 40 + Math.random() * 20;
+        }
+        
+        // Update vehicle position
+        if (!waiting) {
+          switch (direction) {
+            case 'north':
+              position.y -= speed * deltaTime;
+              position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
+              break;
+            case 'south':
+              position.y += speed * deltaTime;
+              position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
+              break;
+            case 'east':
+              position.x += speed * deltaTime;
+              position.y = center.y + (laneWidth * 0.5 + (lane * laneWidth));
+              break;
+            case 'west':
+              position.x -= speed * deltaTime;
+              position.y = center.y - (laneWidth * 0.5 + (lane * laneWidth));
+              break;
           }
         }
         
-        // Return the updated vehicle
-        return {
-          ...vehicle,
-          position,
-          speed,
-          waiting
-        };
-      }).filter(Boolean) as Vehicle[]; // Remove null values (vehicles that have completed their journey)
+        // Draw the vehicle
+        drawVehicle(ctx, vehicle, vehicleLength, vehicleWidth);
+        
+        // Check if vehicle is out of bounds
+        const outOfBounds = (
+          position.x < -50 || position.x > canvasWidth + 50 ||
+          position.y < -50 || position.y > canvasHeight + 50
+        );
+        
+        if (outOfBounds) {
+          throughputWindowRef.current.push(Date.now());
+          completedVehiclesRef.current++;
+        }
+        
+        return outOfBounds ? null : { ...vehicle, position, speed, waiting };
+      }).filter(Boolean) as Vehicle[];
     });
+  };
+  
+  // Draw a vehicle
+  const drawVehicle = (ctx: CanvasRenderingContext2D, vehicle: Vehicle, vehicleLength: number, vehicleWidth: number) => {
+    const { position, direction, type, color } = vehicle;
+    
+    ctx.save();
+    ctx.translate(position.x, position.y);
+    
+    // Rotate based on direction
+    if (direction === 'north') {
+      ctx.rotate(Math.PI * 0);
+    } else if (direction === 'south') {
+      ctx.rotate(Math.PI * 1);
+    } else if (direction === 'east') {
+      ctx.rotate(Math.PI * 0.5);
+    } else if (direction === 'west') {
+      ctx.rotate(Math.PI * 1.5);
+    }
+    
+    // Draw shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, vehicleWidth, vehicleLength);
+    
+    // Draw vehicle body
+    ctx.fillStyle = color;
+    ctx.fillRect(-vehicleWidth / 2, -vehicleLength / 2, vehicleWidth, vehicleLength);
+    
+    // Draw vehicle details based on type
+    if (type === 'car') {
+      ctx.fillStyle = '#222222';
+      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 3);
+      ctx.fillRect(-vehicleWidth / 2 + 1, vehicleLength / 2 - 6, vehicleWidth - 2, 3);
+      
+      // Draw lights
+      if (direction === 'north' || direction === 'south' || direction === 'west') {
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
+      } else {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
+      }
+    } else if (type === 'truck') {
+      ctx.fillStyle = '#222222';
+      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 6);
+      
+      ctx.fillStyle = color === '#1A1F2C' ? '#262A37' : '#4E4950';
+      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 10, vehicleWidth - 2, vehicleLength - 13);
+      
+      // Draw lights
+      if (direction === 'north' || direction === 'south' || direction === 'west') {
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
+      } else {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
+      }
+    } else { // Bus
+      ctx.fillStyle = '#222222';
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 5 + i * 5, vehicleWidth - 2, 3);
+      }
+      
+      // Draw lights
+      if (direction === 'north' || direction === 'south' || direction === 'west') {
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
+        ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
+      } else {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
+        ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
+      }
+    }
+    
+    ctx.restore();
   };
   
   // Draw stats overlay
   const drawStatsOverlay = (
     ctx: CanvasRenderingContext2D, 
-    width: number, 
-    height: number,
-    nsLight: TrafficLight,
+    canvasWidth: number, 
+    canvasHeight: number, 
+    nsLight: TrafficLight, 
     ewLight: TrafficLight
   ) => {
-    // Draw stats box in the top-left corner
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(20, 20, 250, 110);
+    const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
+    const roadWidth = 60;
+    
+    // Draw stats at the top
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(10, 10, 180, 90);
     
     ctx.fillStyle = 'white';
-    ctx.font = '14px Arial';
-    ctx.textAlign = 'left';
-    
-    // Show current statistics
-    ctx.fillText(`Vehicles: ${stats.totalVehicles} (${stats.stoppedVehicles} stopped)`, 30, 40);
-    ctx.fillText(`Average Wait: ${stats.averageWaitTime.toFixed(1)}s`, 30, 60);
-    ctx.fillText(`Throughput: ${stats.throughput} vehicles/min`, 30, 80);
-    ctx.fillText(`Traffic Algorithm: ${algorithmType}`, 30, 100);
-    
-    // Show optimization status
-    ctx.fillText(`Optimization: ${optimizationEnabled ? 'ON' : 'OFF'}`, 30, 120);
-  };
-  
-  // Handle algorithm type change
-  const handleAlgorithmChange = (value: string) => {
-    // Cast the string value to AlgorithmType
-    setAlgorithmType(value as AlgorithmType);
+    ctx.fillText(`Total Vehicles: ${stats.totalVehicles}`, 20, 30);
+    ctx.fillText(`Stopped: ${stats.stoppedVehicles}`, 20, 50);
+    ctx.fillText(`Avg Wait: ${stats.averageWaitTime}s`, 20, 70);
+    ctx.fillText(`Throughput: ${stats.throughput}/min`, 20, 90);
   };
   
   return (
-    <div className="bg-white p-6 rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold mb-4">Traffic Simulation</h2>
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-1">
-          <div className="relative h-[400px] w-full bg-gray-100 rounded-lg overflow-hidden">
-            <canvas 
-              ref={canvasRef} 
-              className="absolute top-0 left-0 w-full h-full" 
-            />
-          </div>
-          
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Simulation Controls</h3>
-              <div className="flex items-center justify-between mb-4">
+    <section id="simulation" className="section-container py-20">
+      <div className="space-y-6 text-center mb-10">
+        <div className="chip bg-accent/10 text-accent inline-block">
+          Interactive Simulation
+        </div>
+        <h2 className="heading-lg">See Our AI Traffic Optimization In Action</h2>
+        <p className="text-muted-foreground max-w-2xl mx-auto">
+          This interactive traffic simulation demonstrates how our AI-powered traffic management system optimizes traffic 
+          flow at intersections. Try adjusting the parameters to see the difference in wait times and throughput.
+        </p>
+      </div>
+
+      <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="col-span-2 p-6">
+            <div className="relative aspect-video rounded-lg overflow-hidden border border-white/20 shadow-xl bg-gray-100">
+              <canvas 
+                ref={canvasRef} 
+                className="w-full h-full"
+                style={{ display: 'block' }}
+              />
+              
+              <div className="absolute top-4 left-4 flex gap-2">
                 <Button 
-                  variant={isRunning ? "destructive" : "default"} 
+                  size="sm" 
+                  variant={isRunning ? "default" : "outline"}
                   onClick={() => setIsRunning(!isRunning)}
+                  className="h-8 rounded-full"
                 >
-                  {isRunning ? 'Pause' : 'Start'}
+                  {isRunning ? "Pause" : "Resume"}
                 </Button>
-                
-                <div className="flex items-center space-x-2">
-                  <Label htmlFor="optimization">Optimization</Label>
-                  <Switch 
-                    id="optimization" 
-                    checked={optimizationEnabled}
-                    onCheckedChange={setOptimizationEnabled}
-                  />
-                </div>
               </div>
               
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between">
+              <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm text-white p-3 text-sm flex justify-between">
+                <div>Vehicles: {stats.totalVehicles} (Stopped: {stats.stoppedVehicles})</div>
+                <div>Avg Wait: {stats.averageWaitTime}s</div>
+                <div>Throughput: {stats.throughput}/min</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Traffic Controls</h3>
+              
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <Label htmlFor="density">Traffic Density</Label>
-                    <span className="text-sm text-gray-500">{density}%</span>
+                    <span className="text-sm text-muted-foreground">{density}%</span>
                   </div>
                   <Slider 
                     id="density"
-                    min={10} 
-                    max={100} 
-                    step={5}
                     value={[density]} 
-                    onValueChange={(values) => setDensity(values[0])}
+                    min={5} 
+                    max={100} 
+                    step={5} 
+                    onValueChange={value => setDensity(value[0])}
                   />
                 </div>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-2">Algorithm Selection</h3>
-              <Tabs defaultValue="adaptive" onValueChange={handleAlgorithmChange}>
-                <TabsList className="w-full">
-                  <TabsTrigger value="fixed" className="flex-1">Fixed</TabsTrigger>
-                  <TabsTrigger value="adaptive" className="flex-1">Adaptive</TabsTrigger>
-                  <TabsTrigger value="predictive" className="flex-1">Predictive</TabsTrigger>
-                </TabsList>
-                <TabsContent value="fixed">
-                  <p className="text-sm text-gray-600 mt-2">
-                    Fixed timing uses a constant cycle length regardless of traffic conditions.
-                  </p>
-                </TabsContent>
-                <TabsContent value="adaptive">
-                  <p className="text-sm text-gray-600 mt-2">
-                    Adaptive timing adjusts green light duration based on current traffic volume.
-                  </p>
-                </TabsContent>
-                <TabsContent value="predictive">
-                  <p className="text-sm text-gray-600 mt-2">
-                    Predictive algorithm considers both current and approaching vehicles to optimize timing.
-                  </p>
-                </TabsContent>
-              </Tabs>
-            </div>
-          </div>
-        </div>
-        
-        <div className="lg:w-1/3">
-          <h3 className="text-lg font-semibold mb-4">Traffic Performance</h3>
-          
-          <div className="space-y-4">
-            <div className="bg-gray-100 p-4 rounded-md">
-              <h4 className="font-medium mb-2">Current Statistics</h4>
-              <div className="grid grid-cols-2 gap-y-2 text-sm">
-                <div>Total Vehicles:</div>
-                <div className="font-semibold">{stats.totalVehicles}</div>
                 
-                <div>Stopped Vehicles:</div>
-                <div className="font-semibold">{stats.stoppedVehicles}</div>
-                
-                <div>Average Wait Time:</div>
-                <div className="font-semibold">{stats.averageWaitTime.toFixed(1)}s</div>
-                
-                <div>Throughput:</div>
-                <div className="font-semibold">{stats.throughput} vehicles/min</div>
-              </div>
-            </div>
-            
-            <div className="bg-gray-100 p-4 rounded-md">
-              <h4 className="font-medium mb-2">Traffic Light Status</h4>
-              <div className="grid grid-cols-2 gap-y-2 text-sm">
-                <div>North-South:</div>
-                <div className={`font-semibold ${
-                  trafficLights[0].state === 'green' ? 'text-green-600' :
-                  trafficLights[0].state === 'yellow' ? 'text-yellow-600' : 'text-red-600'
-                }`}>
-                  {trafficLights[0].state.toUpperCase()} 
-                  {trafficLights[0].state === 'green' || trafficLights[0].state === 'yellow' 
-                    ? `(${trafficLights[0].timeLeft}s)` 
-                    : trafficLights[0].countdown > 0 
-                      ? `(${trafficLights[0].countdown}s →)` 
-                      : ''}
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="optimize" 
+                    checked={optimizationEnabled}
+                    onCheckedChange={setOptimizationEnabled}
+                  />
+                  <Label htmlFor="optimize">Enable AI Optimization</Label>
                 </div>
                 
-                <div>East-West:</div>
-                <div className={`font-semibold ${
-                  trafficLights[1].state === 'green' ? 'text-green-600' :
-                  trafficLights[1].state === 'yellow' ? 'text-yellow-600' : 'text-red-600'
-                }`}>
-                  {trafficLights[1].state.toUpperCase()} 
-                  {trafficLights[1].state === 'green' || trafficLights[1].state === 'yellow' 
-                    ? `(${trafficLights[1].timeLeft}s)` 
-                    : trafficLights[1].countdown > 0 
-                      ? `(${trafficLights[1].countdown}s →)` 
-                      : ''}
+                <Tabs value={algorithmType} onValueChange={setAlgorithmType} className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="fixed">Fixed Time</TabsTrigger>
+                    <TabsTrigger value="adaptive">Adaptive</TabsTrigger>
+                    <TabsTrigger value="predictive">Predictive</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="fixed">
+                    <div className="p-4 border rounded-lg mt-2">
+                      <h4 className="font-medium">Fixed-Time Algorithm</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Traditional traffic lights with fixed timing regardless of traffic flow.
+                      </p>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="adaptive">
+                    <div className="p-4 border rounded-lg mt-2">
+                      <h4 className="font-medium">Adaptive Algorithm</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Adjusts light timing based on current traffic volume at the intersection.
+                      </p>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="predictive">
+                    <div className="p-4 border rounded-lg mt-2">
+                      <h4 className="font-medium">Predictive AI Algorithm</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Advanced AI that predicts upcoming traffic flow patterns and adjusts proactively.
+                      </p>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+                
+                <div className="space-y-4 pt-2">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-medium">Performance Metrics</span>
+                    <span className="text-xs text-muted-foreground">Live Data</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Avg Wait Time</div>
+                      <div className="text-2xl font-semibold text-accent">{stats.averageWaitTime}s</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Throughput</div>
+                      <div className="text-2xl font-semibold text-accent">{stats.throughput}/min</div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-sm font-medium">Efficiency Improvement</div>
+                    <div className="w-full h-3 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                      <div 
+                        className="h-full bg-accent rounded-full transition-all duration-500"
+                        style={{ 
+                          width: `${optimizationEnabled ? 
+                            (algorithmType === 'predictive' ? 75 : algorithmType === 'adaptive' ? 45 : 10) 
+                            : 0}%` 
+                        }}
+                      ></div>
+                    </div>
+                    <div className="text-xs text-right mt-1 text-muted-foreground">
+                      {optimizationEnabled ? 
+                        (algorithmType === 'predictive' ? 'Up to 75% improvement' : 
+                         algorithmType === 'adaptive' ? 'Up to 45% improvement' : 
+                         'Up to 10% improvement') 
+                        : 'No optimization applied'}
+                    </div>
+                  </div>
                 </div>
-                
-                <div>Current Algorithm:</div>
-                <div className="font-semibold capitalize">{algorithmType}</div>
-                
-                <div>Optimization:</div>
-                <div className="font-semibold">{optimizationEnabled ? 'Enabled' : 'Disabled'}</div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+      
+      <div className="mt-12 text-center">
+        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          Our AI-powered traffic management system has been shown to reduce average wait times by up to 75% 
+          and increase intersection throughput by up to 30%, leading to significant reductions in emissions 
+          and fuel consumption.
+        </p>
+        <Button className="mt-6 rounded-full bg-accent hover:bg-accent/90 text-white px-8 py-6">
+          See Full Technical Report
+        </Button>
+      </div>
+    </section>
   );
 };
 
 export default SimulationSection;
-
