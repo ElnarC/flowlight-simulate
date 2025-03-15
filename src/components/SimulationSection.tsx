@@ -68,7 +68,7 @@ const SimulationSection = () => {
   const waitTimesRef = useRef<number[]>([]);
   const throughputWindowRef = useRef<number[]>([]);
   const completedVehiclesRef = useRef(0);
-  
+
   // Initialize canvas and set up resize handler
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -76,14 +76,14 @@ const SimulationSection = () => {
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     const initializeCanvas = () => {
       const container = canvas.parentElement;
       if (!container) return;
       
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-      canvasInitialized.current = true;
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+        canvasInitialized.current = true;
       
       // Draw initial background
       drawBackground(ctx, canvas.width, canvas.height);
@@ -119,32 +119,32 @@ const SimulationSection = () => {
   
   // Update simulation statistics
   const updateStats = () => {
-    const stoppedCount = vehicles.filter(v => v.waiting).length;
+      const stoppedCount = vehicles.filter(v => v.waiting).length;
     
     // Calculate average wait time from recent wait times
     const recentWaitTimes = waitTimesRef.current.slice(-100);
-    const avgWaitTime = recentWaitTimes.length > 0 
+      const avgWaitTime = recentWaitTimes.length > 0 
       ? recentWaitTimes.reduce((sum, time) => sum + time, 0) / recentWaitTimes.length 
-      : 0;
-    
+        : 0;
+      
     // Calculate throughput (vehicles per minute)
-    const now = Date.now();
+      const now = Date.now();
     const oneMinuteAgo = now - 60000;
     throughputWindowRef.current = throughputWindowRef.current.filter(time => time > oneMinuteAgo);
     const vehiclesPerMinute = throughputWindowRef.current.length;
-    
-    setStats({
-      averageWaitTime: Math.round(avgWaitTime * 10) / 10,
-      throughput: vehiclesPerMinute,
+      
+      setStats({
+        averageWaitTime: Math.round(avgWaitTime * 10) / 10,
+        throughput: vehiclesPerMinute,
       totalVehicles: vehicles.length,
-      stoppedVehicles: stoppedCount
-    });
+        stoppedVehicles: stoppedCount
+      });
   };
   
   // Effect to handle changes in optimization settings
   useEffect(() => {
     // Immediately update traffic light durations when settings change
-    setTrafficLights(prev => {
+      setTrafficLights(prev => {
       const updatedLights = JSON.parse(JSON.stringify(prev));
       
       // Get references to both lights
@@ -169,14 +169,14 @@ const SimulationSection = () => {
         // Count waiting vehicles in each direction
         const nsWaiting = vehicles.filter(v => 
           (v.direction === 'north' || v.direction === 'south') && v.waiting
-        ).length;
-        
+                ).length;
+                
         const ewWaiting = vehicles.filter(v => 
           (v.direction === 'east' || v.direction === 'west') && v.waiting
-        ).length;
-        
+                ).length;
+                
         // Apply different duration calculations based on algorithm type
-        if (algorithmType === 'adaptive') {
+                if (algorithmType === 'adaptive') {
           // Adaptive is more responsive to current waiting vehicles
           if (nsLight.state === 'green') {
             if (nsWaiting < ewWaiting * 0.7) {
@@ -286,7 +286,7 @@ const SimulationSection = () => {
             } else if (nsWaiting > ewWaiting * 1.5) {
               // Many more NS vehicles waiting - extend NS green time
               newDuration = Math.min(30, activeLight.duration + 3);
-            } else {
+                  } else {
               // Balanced traffic - standard duration
               newDuration = 20;
             }
@@ -311,8 +311,8 @@ const SimulationSection = () => {
           // Predictive algorithm: consider both waiting and approaching vehicles
           const nsApproaching = vehicles.filter(v => 
             (v.direction === 'north' || v.direction === 'south') && !v.waiting
-          ).length;
-          
+                  ).length;
+                  
           const ewApproaching = vehicles.filter(v => 
             (v.direction === 'east' || v.direction === 'west') && !v.waiting
           ).length;
@@ -330,7 +330,7 @@ const SimulationSection = () => {
             } else if (nsTraffic > ewTraffic * 1.5) {
               // Much more NS traffic - extend green time
               newDuration = Math.min(35, activeLight.duration + 5);
-            } else {
+                } else {
               // Balanced traffic - standard duration
               newDuration = 20;
             }
@@ -345,7 +345,7 @@ const SimulationSection = () => {
             } else if (ewTraffic > nsTraffic * 1.5) {
               // Much more EW traffic - extend green time
               newDuration = Math.min(35, activeLight.duration + 5);
-            } else {
+              } else {
               // Balanced traffic - standard duration
               newDuration = 20;
             }
@@ -404,7 +404,7 @@ const SimulationSection = () => {
           if (!optimizationEnabled || algorithmType === 'fixed') {
             ewLight.timeLeft = 20; // Fixed time algorithm
             ewLight.duration = 20;
-          } else {
+                } else {
             ewLight.timeLeft = ewLight.duration; // Use the duration set by the optimization algorithms
           }
         }
@@ -446,7 +446,7 @@ const SimulationSection = () => {
     
     return () => clearInterval(interval);
   }, [isRunning, algorithmType, optimizationEnabled]);
-  
+
   // Main animation loop
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -507,92 +507,92 @@ const SimulationSection = () => {
   // Draw the background, roads, and intersection
   const drawBackground = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     const center = { x: width / 2, y: height / 2 };
-    const roadWidth = 60;
-    
+      const roadWidth = 60;
+      
     // Draw background
-    ctx.fillStyle = '#f1f1f1';
+      ctx.fillStyle = '#f1f1f1';
     ctx.fillRect(0, 0, width, height);
-    
+      
     // Draw grass areas
-    ctx.fillStyle = '#8db580';
-    ctx.fillRect(0, 0, center.x - roadWidth, center.y - roadWidth);
+      ctx.fillStyle = '#8db580';
+      ctx.fillRect(0, 0, center.x - roadWidth, center.y - roadWidth);
     ctx.fillRect(center.x + roadWidth, 0, width - (center.x + roadWidth), center.y - roadWidth);
     ctx.fillRect(0, center.y + roadWidth, center.x - roadWidth, height - (center.y + roadWidth));
     ctx.fillRect(center.x + roadWidth, center.y + roadWidth, width - (center.x + roadWidth), height - (center.y + roadWidth));
     
     // Draw roads
-    ctx.fillStyle = '#393939';
+      ctx.fillStyle = '#393939';
     ctx.fillRect(0, center.y - roadWidth, width, roadWidth * 2);
     ctx.fillRect(center.x - roadWidth, 0, roadWidth * 2, height);
-    
+      
     // Draw road markings
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
-    
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      
     // Horizontal road borders
-    ctx.beginPath();
-    ctx.moveTo(0, center.y - roadWidth);
+      ctx.beginPath();
+      ctx.moveTo(0, center.y - roadWidth);
     ctx.lineTo(width, center.y - roadWidth);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(0, center.y + roadWidth);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(0, center.y + roadWidth);
     ctx.lineTo(width, center.y + roadWidth);
-    ctx.stroke();
-    
+      ctx.stroke();
+      
     // Vertical road borders
-    ctx.beginPath();
-    ctx.moveTo(center.x - roadWidth, 0);
+      ctx.beginPath();
+      ctx.moveTo(center.x - roadWidth, 0);
     ctx.lineTo(center.x - roadWidth, height);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(center.x + roadWidth, 0);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(center.x + roadWidth, 0);
     ctx.lineTo(center.x + roadWidth, height);
-    ctx.stroke();
-    
+      ctx.stroke();
+      
     // Draw center lines
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 10]);
-    
-    ctx.beginPath();
-    ctx.moveTo(0, center.y);
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 10]);
+      
+      ctx.beginPath();
+      ctx.moveTo(0, center.y);
     ctx.lineTo(width, center.y);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(center.x, 0);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(center.x, 0);
     ctx.lineTo(center.x, height);
-    ctx.stroke();
-    
+      ctx.stroke();
+      
     // Draw crosswalks
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'white';
-    
-    const stripeWidth = 6;
-    const stripeGap = 4;
-    const crosswalkWidth = 15;
-    
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'white';
+      
+      const stripeWidth = 6;
+      const stripeGap = 4;
+      const crosswalkWidth = 15;
+      
     // North crosswalk
-    for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
-      ctx.fillRect(x, center.y - roadWidth - crosswalkWidth, stripeWidth, crosswalkWidth);
-    }
-    
+      for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
+        ctx.fillRect(x, center.y - roadWidth - crosswalkWidth, stripeWidth, crosswalkWidth);
+      }
+      
     // South crosswalk
-    for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
-      ctx.fillRect(x, center.y + roadWidth, stripeWidth, crosswalkWidth);
-    }
-    
+      for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
+        ctx.fillRect(x, center.y + roadWidth, stripeWidth, crosswalkWidth);
+      }
+      
     // West crosswalk
-    for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
-      ctx.fillRect(center.x - roadWidth - crosswalkWidth, y, crosswalkWidth, stripeWidth);
-    }
-    
+      for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
+        ctx.fillRect(center.x - roadWidth - crosswalkWidth, y, crosswalkWidth, stripeWidth);
+      }
+      
     // East crosswalk
-    for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
-      ctx.fillRect(center.x + roadWidth, y, crosswalkWidth, stripeWidth);
-    }
+      for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
+        ctx.fillRect(center.x + roadWidth, y, crosswalkWidth, stripeWidth);
+      }
   };
   
   // Draw traffic lights
@@ -614,99 +614,99 @@ const SimulationSection = () => {
       state: LightState, 
       timeLeft: number
     ) => {
-      ctx.fillStyle = '#222';
-      
-      if (direction === 'vertical') {
+        ctx.fillStyle = '#222';
+        
+        if (direction === 'vertical') {
         // Draw vertical traffic light housing
-        ctx.fillRect(x - 7, y - 22, 14, 40);
-        
+          ctx.fillRect(x - 7, y - 22, 14, 40);
+          
         // Draw red light
-        ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
-        ctx.beginPath();
-        ctx.arc(x, y - 15, 5, 0, Math.PI * 2);
-        ctx.fill();
-        
+          ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
+          ctx.beginPath();
+          ctx.arc(x, y - 15, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
         // Draw yellow light
-        ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        
+          ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
         // Draw green light
-        ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
-        ctx.beginPath();
-        ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
-        ctx.fill();
-        
+          ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
+          ctx.beginPath();
+          ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
         // Draw border and pole
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x - 7, y - 22, 14, 40);
-        
-        ctx.fillStyle = '#333';
-        ctx.fillRect(x - 2, y + 18, 4, 15);
-      } else {
+          ctx.strokeStyle = '#111';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x - 7, y - 22, 14, 40);
+          
+          ctx.fillStyle = '#333';
+          ctx.fillRect(x - 2, y + 18, 4, 15);
+        } else {
         // Draw horizontal traffic light housing
-        ctx.fillRect(x - 22, y - 7, 40, 14);
-        
+          ctx.fillRect(x - 22, y - 7, 40, 14);
+          
         // Draw red light
-        ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
-        ctx.beginPath();
-        ctx.arc(x - 15, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        
+          ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
+          ctx.beginPath();
+          ctx.arc(x - 15, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
         // Draw yellow light
-        ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        
+          ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
         // Draw green light
-        ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
-        ctx.beginPath();
-        ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        
+          ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
+          ctx.beginPath();
+          ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
         // Draw border and pole
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x - 22, y - 7, 40, 14);
-        
-        ctx.fillStyle = '#333';
-        ctx.fillRect(x + 18, y - 2, 15, 4);
-      }
-    };
-    
+          ctx.strokeStyle = '#111';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x - 22, y - 7, 40, 14);
+          
+          ctx.fillStyle = '#333';
+          ctx.fillRect(x + 18, y - 2, 15, 4);
+        }
+      };
+      
     // Draw the four traffic lights at the intersection
-    drawTrafficLight(
-      center.x + roadWidth + 20, 
-      center.y - roadWidth - 20, 
-      'vertical', 
-      nsLight.state,
+      drawTrafficLight(
+        center.x + roadWidth + 20, 
+        center.y - roadWidth - 20, 
+        'vertical', 
+        nsLight.state,
       nsLight.timeLeft
-    );
-    
-    drawTrafficLight(
-      center.x - roadWidth - 20, 
-      center.y + roadWidth + 20, 
-      'vertical', 
-      nsLight.state,
+      );
+      
+      drawTrafficLight(
+        center.x - roadWidth - 20, 
+        center.y + roadWidth + 20, 
+        'vertical', 
+        nsLight.state,
       nsLight.timeLeft
-    );
-    
-    drawTrafficLight(
-      center.x + roadWidth + 20, 
-      center.y + roadWidth + 20, 
-      'horizontal', 
-      ewLight.state,
+      );
+      
+      drawTrafficLight(
+        center.x + roadWidth + 20, 
+        center.y + roadWidth + 20, 
+        'horizontal', 
+        ewLight.state,
       ewLight.timeLeft
-    );
-    
-    drawTrafficLight(
-      center.x - roadWidth - 20, 
-      center.y - roadWidth - 20, 
-      'horizontal', 
-      ewLight.state,
+      );
+      
+      drawTrafficLight(
+        center.x - roadWidth - 20, 
+        center.y - roadWidth - 20, 
+        'horizontal', 
+        ewLight.state,
       ewLight.timeLeft
     );
     
@@ -778,58 +778,58 @@ const SimulationSection = () => {
     
     // Randomly select direction, vehicle type, and lane
     const direction = ['north', 'south', 'east', 'west'][Math.floor(Math.random() * 4)] as Direction;
-    const vehicleType = Math.random() > 0.8 
-      ? (Math.random() > 0.5 ? 'truck' : 'bus') 
-      : 'car';
-    
-    const vehicleColors = [
+        const vehicleType = Math.random() > 0.8 
+          ? (Math.random() > 0.5 ? 'truck' : 'bus') 
+          : 'car';
+        
+        const vehicleColors = [
       '#1A1F2C', '#403E43', '#221F26', '#8E9196', '#4A4A4A', '#555555'
-    ];
-    
-    const lane = Math.floor(Math.random() * 2);
-    let position = { x: 0, y: 0 };
-    const laneOffset = laneWidth * 0.5 + (lane * laneWidth);
-    
+        ];
+        
+        const lane = Math.floor(Math.random() * 2);
+        let position = { x: 0, y: 0 };
+        const laneOffset = laneWidth * 0.5 + (lane * laneWidth);
+        
     // Set initial position based on direction
-    switch (direction) {
-      case 'north':
-        position = { 
-          x: center.x + laneOffset,
+        switch (direction) {
+          case 'north':
+            position = { 
+              x: center.x + laneOffset,
           y: canvasHeight + 20 
-        };
-        break;
-      case 'south':
-        position = { 
-          x: center.x - laneOffset,
-          y: -20 
-        };
-        break;
-      case 'east':
-        position = { 
-          x: -20,
-          y: center.y + laneOffset 
-        };
-        break;
-      case 'west':
-        position = { 
+            };
+            break;
+          case 'south':
+            position = { 
+              x: center.x - laneOffset,
+              y: -20 
+            };
+            break;
+          case 'east':
+            position = { 
+              x: -20,
+              y: center.y + laneOffset 
+            };
+            break;
+          case 'west':
+            position = { 
           x: canvasWidth + 20,
-          y: center.y - laneOffset 
-        };
-        break;
-    }
-    
+              y: center.y - laneOffset 
+            };
+            break;
+        }
+        
     // Create and add the new vehicle
-    setVehicles(prev => [...prev, {
+        setVehicles(prev => [...prev, {
       id: `vehicle-${vehicleIdCounter.current++}`,
-      type: vehicleType,
-      color: vehicleColors[Math.floor(Math.random() * vehicleColors.length)],
-      direction,
-      position,
-      speed: 40 + Math.random() * 20,
-      waiting: false,
-      created: Date.now(),
-      lane
-    }]);
+          type: vehicleType,
+          color: vehicleColors[Math.floor(Math.random() * vehicleColors.length)],
+          direction,
+          position,
+          speed: 40 + Math.random() * 20,
+          waiting: false,
+          created: Date.now(),
+          lane
+        }]);
   };
   
   // Update and draw vehicles
@@ -849,15 +849,15 @@ const SimulationSection = () => {
     const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
     const roadWidth = 60;
     const laneWidth = roadWidth / 2;
-    
-    setVehicles(prev => {
-      return prev.map(vehicle => {
-        let { position, speed, waiting, direction, lane } = vehicle;
-        const vehicleLength = vehicle.type === 'car' ? 15 : vehicle.type === 'truck' ? 25 : 30;
-        const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
-        
+      
+      setVehicles(prev => {
+        return prev.map(vehicle => {
+          let { position, speed, waiting, direction, lane } = vehicle;
+          const vehicleLength = vehicle.type === 'car' ? 15 : vehicle.type === 'truck' ? 25 : 30;
+          const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
+          
         // Determine if vehicle can pass through intersection
-        const canPass = (
+          const canPass = (
           (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
           (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
         );
@@ -876,39 +876,39 @@ const SimulationSection = () => {
         
         // Check if approaching intersection - refined logic to stop exactly at intersection
         const stoppingDistance = 5; // Small buffer so vehicles stop exactly at intersection edge
-        const approachingIntersection = (
+          const approachingIntersection = (
           distanceToIntersection > 0 && distanceToIntersection < 100
-        );
-        
-        // Check if already in intersection
-        const inIntersection = (
-          position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
-          position.y > center.y - roadWidth && position.y < center.y + roadWidth
-        );
-        
-        // Check for vehicle ahead - improved distance calculation
-        const vehicleAhead = prev.find(other => {
-          if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
-          
-          const distance = direction === 'north' || direction === 'south'
-            ? Math.abs(other.position.y - position.y)
-            : Math.abs(other.position.x - position.x);
-            
-          const otherIsAhead = (
-            (direction === 'north' && other.position.y < position.y) ||
-            (direction === 'south' && other.position.y > position.y) ||
-            (direction === 'east' && other.position.x > position.x) ||
-            (direction === 'west' && other.position.x < position.x)
           );
           
-          return otherIsAhead && distance < vehicleLength * 2;
-        });
-        
+        // Check if already in intersection
+          const inIntersection = (
+            position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
+            position.y > center.y - roadWidth && position.y < center.y + roadWidth
+          );
+          
+        // Check for vehicle ahead - improved distance calculation
+          const vehicleAhead = prev.find(other => {
+            if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
+            
+            const distance = direction === 'north' || direction === 'south'
+              ? Math.abs(other.position.y - position.y)
+              : Math.abs(other.position.x - position.x);
+              
+            const otherIsAhead = (
+              (direction === 'north' && other.position.y < position.y) ||
+              (direction === 'south' && other.position.y > position.y) ||
+              (direction === 'east' && other.position.x > position.x) ||
+              (direction === 'west' && other.position.x < position.x)
+            );
+            
+            return otherIsAhead && distance < vehicleLength * 2;
+          });
+          
         // Update vehicle waiting status and speed
-        if (!canPass && approachingIntersection && !inIntersection) {
+          if (!canPass && approachingIntersection && !inIntersection) {
           // Need to stop at intersection
-          waiting = true;
-          speed = 0;
+            waiting = true;
+            speed = 0;
           
           // Move vehicle exactly to the intersection boundary for clean stopping
           if (direction === 'north' && distanceToIntersection < stoppingDistance) {
@@ -921,46 +921,46 @@ const SimulationSection = () => {
             position.x = center.x + roadWidth + stoppingDistance;
           }
           
-          if (!vehicle.waiting) {
+            if (!vehicle.waiting) {
             waitTimesRef.current.push(0);
-          }
-        } else if (vehicleAhead) {
-          waiting = true;
-          speed = 0;
-        } else {
-          if (waiting) {
-            const waitTime = (Date.now() - vehicle.created) / 1000;
-            if (waitTime > 0.5) {
+            }
+          } else if (vehicleAhead) {
+            waiting = true;
+            speed = 0;
+          } else {
+            if (waiting) {
+              const waitTime = (Date.now() - vehicle.created) / 1000;
+              if (waitTime > 0.5) {
               waitTimesRef.current[waitTimesRef.current.length - 1] = waitTime;
-            } else {
+              } else {
               waitTimesRef.current.pop();
+              }
+            }
+            waiting = false;
+            speed = 40 + Math.random() * 20;
+          }
+          
+        // Update vehicle position
+          if (!waiting) {
+            switch (direction) {
+              case 'north':
+                position.y -= speed * deltaTime;
+                position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
+                break;
+              case 'south':
+                position.y += speed * deltaTime;
+                position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
+                break;
+              case 'east':
+                position.x += speed * deltaTime;
+                position.y = center.y + (laneWidth * 0.5 + (lane * laneWidth));
+                break;
+              case 'west':
+                position.x -= speed * deltaTime;
+                position.y = center.y - (laneWidth * 0.5 + (lane * laneWidth));
+                break;
             }
           }
-          waiting = false;
-          speed = 40 + Math.random() * 20;
-        }
-        
-        // Update vehicle position
-        if (!waiting) {
-          switch (direction) {
-            case 'north':
-              position.y -= speed * deltaTime;
-              position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
-              break;
-            case 'south':
-              position.y += speed * deltaTime;
-              position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
-              break;
-            case 'east':
-              position.x += speed * deltaTime;
-              position.y = center.y + (laneWidth * 0.5 + (lane * laneWidth));
-              break;
-            case 'west':
-              position.x -= speed * deltaTime;
-              position.y = center.y - (laneWidth * 0.5 + (lane * laneWidth));
-              break;
-          }
-        }
         
         // Draw the vehicle
         drawVehicle(ctx, vehicle, vehicleLength, vehicleWidth);
@@ -984,85 +984,139 @@ const SimulationSection = () => {
   // Draw a vehicle
   const drawVehicle = (ctx: CanvasRenderingContext2D, vehicle: Vehicle, vehicleLength: number, vehicleWidth: number) => {
     const { position, direction, type, color } = vehicle;
-    
-    ctx.save();
-    ctx.translate(position.x, position.y);
-    
+          
+          ctx.save();
+          ctx.translate(position.x, position.y);
+          
     // Rotate based on direction
-    if (direction === 'north') {
-      ctx.rotate(Math.PI * 0);
-    } else if (direction === 'south') {
-      ctx.rotate(Math.PI * 1);
-    } else if (direction === 'east') {
-      ctx.rotate(Math.PI * 0.5);
-    } else if (direction === 'west') {
-      ctx.rotate(Math.PI * 1.5);
-    }
-    
+          if (direction === 'north') {
+            ctx.rotate(Math.PI * 0);
+          } else if (direction === 'south') {
+            ctx.rotate(Math.PI * 1);
+          } else if (direction === 'east') {
+            ctx.rotate(Math.PI * 0.5);
+          } else if (direction === 'west') {
+            ctx.rotate(Math.PI * 1.5);
+          }
+          
     // Draw shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, vehicleWidth, vehicleLength);
-    
+          ctx.fillStyle = 'rgba(0,0,0,0.2)';
+          ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, vehicleWidth, vehicleLength);
+          
     // Draw vehicle body
     ctx.fillStyle = color;
-    ctx.fillRect(-vehicleWidth / 2, -vehicleLength / 2, vehicleWidth, vehicleLength);
-    
+          ctx.fillRect(-vehicleWidth / 2, -vehicleLength / 2, vehicleWidth, vehicleLength);
+          
     // Draw vehicle details based on type
     if (type === 'car') {
-      ctx.fillStyle = '#222222';
-      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 3);
-      ctx.fillRect(-vehicleWidth / 2 + 1, vehicleLength / 2 - 6, vehicleWidth - 2, 3);
-      
+            ctx.fillStyle = '#222222';
+            ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 3);
+            ctx.fillRect(-vehicleWidth / 2 + 1, vehicleLength / 2 - 6, vehicleWidth - 2, 3);
+            
       // Draw lights
-      if (direction === 'north' || direction === 'south' || direction === 'west') {
-        ctx.fillStyle = '#ff3b30';
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
-        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
-      } else {
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
-        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
-      }
+            if (direction === 'north' || direction === 'south' || direction === 'west') {
+              ctx.fillStyle = '#ff3b30';
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
+              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
+            } else {
+              ctx.fillStyle = '#ffcc00';
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
+              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
+            }
     } else if (type === 'truck') {
-      ctx.fillStyle = '#222222';
-      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 6);
-      
+            ctx.fillStyle = '#222222';
+            ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 6);
+            
       ctx.fillStyle = color === '#1A1F2C' ? '#262A37' : '#4E4950';
-      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 10, vehicleWidth - 2, vehicleLength - 13);
-      
+            ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 10, vehicleWidth - 2, vehicleLength - 13);
+            
       // Draw lights
-      if (direction === 'north' || direction === 'south' || direction === 'west') {
-        ctx.fillStyle = '#ff3b30';
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
-        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
-      } else {
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
-        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
-      }
+            if (direction === 'north' || direction === 'south' || direction === 'west') {
+              ctx.fillStyle = '#ff3b30';
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
+              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
+            } else {
+              ctx.fillStyle = '#ffcc00';
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
+              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
+            }
     } else { // Bus
-      ctx.fillStyle = '#222222';
-      for (let i = 0; i < 4; i++) {
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 5 + i * 5, vehicleWidth - 2, 3);
-      }
-      
+            ctx.fillStyle = '#222222';
+            for (let i = 0; i < 4; i++) {
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 5 + i * 5, vehicleWidth - 2, 3);
+            }
+            
       // Draw lights
-      if (direction === 'north' || direction === 'south' || direction === 'west') {
-        ctx.fillStyle = '#ff3b30';
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
-        ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
-      } else {
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
-        ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
-      }
-    }
-    
-    ctx.restore();
+            if (direction === 'north' || direction === 'south' || direction === 'west') {
+              ctx.fillStyle = '#ff3b30';
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
+              ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
+            } else {
+              ctx.fillStyle = '#ffcc00';
+              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
+              ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
+            }
+          }
+          
+          ctx.restore();
   };
   
- 
+  // Draw stats overlay
+  const drawStatsOverlay = (
+    ctx: CanvasRenderingContext2D, 
+    canvasWidth: number, 
+    canvasHeight: number, 
+    nsLight: TrafficLight, 
+    ewLight: TrafficLight
+  ) => {
+    const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
+    const roadWidth = 60;
     
+    // Draw stats at the top left with modern design
+    const padding = 20;
+    const statsWidth = 180;
+    const statsHeight = 90;
+    const cornerRadius = 12;
+    
+    // Draw rounded rectangle background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.moveTo(padding + cornerRadius, padding);
+    ctx.arcTo(padding + statsWidth, padding, padding + statsWidth, padding + cornerRadius, cornerRadius);
+    ctx.arcTo(padding + statsWidth, padding + statsHeight, padding + statsWidth - cornerRadius, padding + statsHeight, cornerRadius);
+    ctx.arcTo(padding, padding + statsHeight, padding, padding + statsHeight - cornerRadius, cornerRadius);
+    ctx.arcTo(padding, padding, padding + cornerRadius, padding, cornerRadius);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Add subtle glow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 5;
+    
+    // Add title
+    ctx.shadowColor = 'transparent';
+      ctx.fillStyle = 'white';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('TRAFFIC STATISTICS', padding + statsWidth/2, padding + 20);
+    
+    // Draw divider line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding + 20, padding + 30);
+    ctx.lineTo(padding + statsWidth - 20, padding + 30);
+    ctx.stroke();
+    
+    // Display statistics with modern font
+    ctx.textAlign = 'left';
+    ctx.font = '14px Arial';
+    
+    // Vehicle counts
+    ctx.fillText(`Vehicles: ${stats.totalVehicles}`, padding + 20, padding + 50);
+    ctx.fillText(`Stopped: ${stats.stoppedVehicles}`, padding + 20, padding + 70);
   };
   
   // UI control handlers with immediate effect
@@ -1232,5 +1286,6 @@ const SimulationSection = () => {
       </div>
     </section>
   );
+};
 
 export default SimulationSection;
