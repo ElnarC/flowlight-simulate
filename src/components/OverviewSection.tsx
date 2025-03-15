@@ -41,11 +41,14 @@ const OverviewSection = () => {
         <div className="relative">
           <div className="aspect-video rounded-2xl overflow-hidden bg-black/5 glass-card p-1">
             <div className="w-full h-full rounded-xl overflow-hidden relative">
-              <img 
-                src="https://images.unsplash.com/photo-1530850083578-b423109a5713?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2670&q=80" 
-                alt="Traffic intersection aerial view" 
+              <video 
                 className="w-full h-full object-cover"
-              />
+                poster="https://images.unsplash.com/photo-1530850083578-b423109a5713?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2670&q=80"
+                controls
+              >
+                <source src="about:blank" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center">
