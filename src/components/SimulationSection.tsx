@@ -248,26 +248,21 @@ const SimulationSection = () => {
   useEffect(() => {
     if (!isRunning) return;
     
-    const updateTrafficLights = () => {
+    const interval = setInterval(() => {
       const now = Date.now();
-      const elapsedSeconds = Math.floor((now - lastLightUpdateTimeRef.current) / 1000);
-      
-      if (elapsedSeconds < 1) return; // Only update every second
-      
-      lastLightUpdateTimeRef.current = now;
       
       setTrafficLights(prev => {
-        // Create a deep copy to avoid mutation issues
-        const updatedLights = JSON.parse(JSON.stringify(prev)) as TrafficLight[];
+        // Create a deep copy to avoid issues
+        const updatedLights = structuredClone(prev);
         
         // Get references to both lights
         const nsLight = updatedLights.find(l => l.direction === 'ns')!;
         const ewLight = updatedLights.find(l => l.direction === 'ew')!;
         
-        // First, decrement countdown timers for lights in red state with active countdown
+        // First, decrement countdown timers for lights in red state
         updatedLights.forEach(light => {
           if (light.state === 'red' && light.countdown > 0) {
-            light.countdown -= 1;
+            light.countdown = Math.max(0, light.countdown - 1);
           }
         });
         
@@ -276,71 +271,122 @@ const SimulationSection = () => {
           light.timeLeft = Math.max(0, light.timeLeft - 1);
         });
         
-        // Process state transitions based on timeLeft
-        updatedLights.forEach(light => {
-          if (light.timeLeft === 0) {
-            if (light.state === 'green') {
-              // Green → Yellow transition
-              light.state = 'yellow';
-              light.timeLeft = 3; // Yellow duration is fixed at 3 seconds
-            } else if (light.state === 'yellow') {
-              // Yellow → Red transition
-              light.state = 'red';
+        // Process light transitions
+        if (nsLight.timeLeft === 0) {
+          if (nsLight.state === 'green') {
+            // Green → Yellow
+            nsLight.state = 'yellow';
+            nsLight.timeLeft = 3;
+          } else if (nsLight.state === 'yellow') {
+            // Yellow → Red
+            nsLight.state = 'red';
+            
+            // Set duration based on optimization logic
+            if (optimizationEnabled) {
+              const nsWaiting = vehicles.filter(v => 
+                (v.direction === 'north' || v.direction === 'south') && v.waiting
+              ).length;
               
-              // The other light should prepare to turn green
-              const otherLight = updatedLights.find(l => l.direction !== light.direction)!;
+              const ewWaiting = vehicles.filter(v => 
+                (v.direction === 'east' || v.direction === 'west') && v.waiting
+              ).length;
               
-              // Set countdown for this light based on the other light's state
-              if (otherLight.state === 'red') {
-                // If other light is already red, this is an error state - fix it
-                otherLight.countdown = 3; // Start countdown for other light to turn green
-                light.timeLeft = otherLight.duration + 3; // This light stays red for the duration of other light's green + yellow
+              if (algorithmType === 'adaptive') {
+                nsLight.timeLeft = Math.max(15, Math.min(30, 15 + Math.floor(ewWaiting / 3)));
+              } else if (algorithmType === 'predictive') {
+                const ewApproaching = vehicles.filter(v => 
+                  (v.direction === 'east' || v.direction === 'west') && !v.waiting
+                ).length;
+                
+                nsLight.timeLeft = Math.max(20, Math.min(35, 20 + Math.floor((ewWaiting + ewApproaching * 0.5) / 3)));
               } else {
-                // Normal case: other light is yellow or green
-                light.timeLeft = otherLight.timeLeft + (otherLight.state === 'green' ? 3 : 0); // Stay red until other light finishes its cycle
+                nsLight.timeLeft = 20;
               }
-            } else if (light.state === 'red' && light.countdown === 0) {
-              // Red → Green transition (only if countdown has reached zero)
-              const otherLight = updatedLights.find(l => l.direction !== light.direction)!;
-              
-              if (otherLight.state === 'red' || (otherLight.state === 'yellow' && otherLight.timeLeft === 0)) {
-                // Only turn green if the other light is red or just finished being yellow
-                light.state = 'green';
-                light.timeLeft = light.duration;
-              } else {
-                // The other light is still active, so stay red
-                light.timeLeft = 1; // Check again in 1 second
-              }
+            } else {
+              nsLight.timeLeft = 20;
             }
+            
+            // Start countdown for east-west light
+            ewLight.countdown = 3;
           }
-        });
+        }
         
-        // Ensure lights are in a valid state (never both green at the same time)
+        if (ewLight.timeLeft === 0) {
+          if (ewLight.state === 'green') {
+            // Green → Yellow
+            ewLight.state = 'yellow';
+            ewLight.timeLeft = 3;
+          } else if (ewLight.state === 'yellow') {
+            // Yellow → Red
+            ewLight.state = 'red';
+            
+            // Set duration based on optimization logic
+            if (optimizationEnabled) {
+              const nsWaiting = vehicles.filter(v => 
+                (v.direction === 'north' || v.direction === 'south') && v.waiting
+              ).length;
+              
+              const ewWaiting = vehicles.filter(v => 
+                (v.direction === 'east' || v.direction === 'west') && v.waiting
+              ).length;
+              
+              if (algorithmType === 'adaptive') {
+                ewLight.timeLeft = Math.max(15, Math.min(30, 15 + Math.floor(nsWaiting / 3)));
+              } else if (algorithmType === 'predictive') {
+                const nsApproaching = vehicles.filter(v => 
+                  (v.direction === 'north' || v.direction === 'south') && !v.waiting
+                ).length;
+                
+                ewLight.timeLeft = Math.max(20, Math.min(35, 20 + Math.floor((nsWaiting + nsApproaching * 0.5) / 3)));
+              } else {
+                ewLight.timeLeft = 20;
+              }
+            } else {
+              ewLight.timeLeft = 20;
+            }
+            
+            // Start countdown for north-south light
+            nsLight.countdown = 3;
+          }
+        }
+        
+        // Handle countdown completion (red to green transition)
+        if (nsLight.countdown === 0 && nsLight.state === 'red' && ewLight.state === 'red') {
+          // If both lights are red and NS countdown is complete, make NS green
+          nsLight.state = 'green';
+          nsLight.timeLeft = nsLight.duration;
+        }
+        
+        if (ewLight.countdown === 0 && ewLight.state === 'red' && nsLight.state === 'red') {
+          // If both lights are red and EW countdown is complete, make EW green
+          ewLight.state = 'green';
+          ewLight.timeLeft = ewLight.duration;
+        }
+        
+        // Safety check - never both green at same time
         if (nsLight.state === 'green' && ewLight.state === 'green') {
-          // This should never happen, but if it does, fix it
+          // If somehow both are green, prioritize the one with more time left
           if (nsLight.timeLeft >= ewLight.timeLeft) {
             ewLight.state = 'red';
-            ewLight.timeLeft = nsLight.timeLeft + 3; // +3 for yellow phase
+            ewLight.timeLeft = nsLight.timeLeft + 3;
           } else {
             nsLight.state = 'red';
-            nsLight.timeLeft = ewLight.timeLeft + 3; // +3 for yellow phase
+            nsLight.timeLeft = ewLight.timeLeft + 3;
           }
         }
         
         return updatedLights;
       });
-    };
-    
-    const interval = setInterval(updateTrafficLights, 200); // Check frequently but only update every second
+    }, 1000);
     
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, vehicles, optimizationEnabled, algorithmType]);
   
   // Main animation loop
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvasRef.current) return;
     
+    const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
@@ -391,7 +437,7 @@ const SimulationSection = () => {
     animationFrameId.current = requestAnimationFrame(animate);
     
     return () => cancelAnimationFrame(animationFrameId.current);
-  }, [isRunning, density, trafficLights]);
+  }, [isRunning, density, trafficLights, optimizationEnabled, algorithmType, vehicles]);
   
   // Draw the background, roads, and intersection
   const drawBackground = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
@@ -698,508 +744,293 @@ const SimulationSection = () => {
     let position = { x: 0, y: 0 };
     const laneOffset = laneWidth * 0.5 + (lane * laneWidth);
     
-      const center = { x: canvas.width / 2, y: canvas.height / 2 };
-      const roadWidth = 60;
-      const laneWidth = roadWidth / 2;
-      
-      ctx.fillStyle = '#f1f1f1';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      ctx.fillStyle = '#8db580';
-      ctx.fillRect(0, 0, center.x - roadWidth, center.y - roadWidth);
-      ctx.fillRect(center.x + roadWidth, 0, canvas.width - (center.x + roadWidth), center.y - roadWidth);
-      ctx.fillRect(0, center.y + roadWidth, center.x - roadWidth, canvas.height - (center.y + roadWidth));
-      ctx.fillRect(center.x + roadWidth, center.y + roadWidth, canvas.width - (center.x + roadWidth), canvas.height - (center.y + roadWidth));
-      
-      ctx.fillStyle = '#393939';
-      ctx.fillRect(0, center.y - roadWidth, canvas.width, roadWidth * 2);
-      ctx.fillRect(center.x - roadWidth, 0, roadWidth * 2, canvas.height);
-      
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
-      
-      ctx.beginPath();
-      ctx.moveTo(0, center.y - roadWidth);
-      ctx.lineTo(canvas.width, center.y - roadWidth);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(0, center.y + roadWidth);
-      ctx.lineTo(canvas.width, center.y + roadWidth);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(center.x - roadWidth, 0);
-      ctx.lineTo(center.x - roadWidth, canvas.height);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(center.x + roadWidth, 0);
-      ctx.lineTo(center.x + roadWidth, canvas.height);
-      ctx.stroke();
-      
-      ctx.strokeStyle = '#FFD700';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([10, 10]);
-      
-      ctx.beginPath();
-      ctx.moveTo(0, center.y);
-      ctx.lineTo(canvas.width, center.y);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(center.x, 0);
-      ctx.lineTo(center.x, canvas.height);
-      ctx.stroke();
-      
-      ctx.setLineDash([]);
-      ctx.fillStyle = 'white';
-      
-      const stripeWidth = 6;
-      const stripeGap = 4;
-      const crosswalkWidth = 15;
-      
-      for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
-        ctx.fillRect(x, center.y - roadWidth - crosswalkWidth, stripeWidth, crosswalkWidth);
-      }
-      
-      for (let x = center.x - roadWidth - crosswalkWidth; x < center.x + roadWidth + crosswalkWidth; x += stripeWidth + stripeGap) {
-        ctx.fillRect(x, center.y + roadWidth, stripeWidth, crosswalkWidth);
-      }
-      
-      for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
-        ctx.fillRect(center.x - roadWidth - crosswalkWidth, y, crosswalkWidth, stripeWidth);
-      }
-      
-      for (let y = center.y - roadWidth - crosswalkWidth; y < center.y + roadWidth + crosswalkWidth; y += stripeWidth + stripeGap) {
-        ctx.fillRect(center.x + roadWidth, y, crosswalkWidth, stripeWidth);
-      }
-      
-      const nsLight = trafficLights.find(l => l.direction === 'ns')!;
-      const ewLight = trafficLights.find(l => l.direction === 'ew')!;
-      
-      const drawTrafficLight = (x: number, y: number, direction: 'vertical' | 'horizontal', state: 'red' | 'yellow' | 'green', countdown: number, timeLeft: number) => {
-        ctx.fillStyle = '#222';
+    // Set initial position based on direction
+    switch (direction) {
+      case 'north':
+        position = { 
+          x: center.x + laneOffset,
+          y: canvasHeight + 20 
+        };
+        break;
+      case 'south':
+        position = { 
+          x: center.x - laneOffset,
+          y: -20 
+        };
+        break;
+      case 'east':
+        position = { 
+          x: -20,
+          y: center.y + laneOffset 
+        };
+        break;
+      case 'west':
+        position = { 
+          x: canvasWidth + 20,
+          y: center.y - laneOffset 
+        };
+        break;
+    }
+    
+    // Create and add the new vehicle
+    setVehicles(prev => [...prev, {
+      id: `vehicle-${vehicleIdCounter.current++}`,
+      type: vehicleType,
+      color: vehicleColors[Math.floor(Math.random() * vehicleColors.length)],
+      direction,
+      position,
+      speed: 40 + Math.random() * 20,
+      waiting: false,
+      created: Date.now(),
+      lane
+    }]);
+  };
+  
+  // Update and draw vehicles
+  const updateVehicles = (
+    deltaTime: number, 
+    canvasWidth: number, 
+    canvasHeight: number, 
+    nsLight: TrafficLight, 
+    ewLight: TrafficLight
+  ) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
+    const roadWidth = 60;
+    const laneWidth = roadWidth / 2;
+    
+    setVehicles(prev => {
+      return prev.map(vehicle => {
+        let { position, speed, waiting, direction, lane } = vehicle;
+        const vehicleLength = vehicle.type === 'car' ? 15 : vehicle.type === 'truck' ? 25 : 30;
+        const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
         
-        if (direction === 'vertical') {
-          ctx.fillRect(x - 7, y - 22, 14, 40);
+        // Determine if vehicle can pass through intersection
+        const canPass = (
+          (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
+          (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
+        );
+        
+        // Check if approaching intersection
+        const approachingIntersection = (
+          (direction === 'north' && position.y > center.y + roadWidth && position.y < center.y + roadWidth + 100) ||
+          (direction === 'south' && position.y < center.y - roadWidth && position.y > center.y - roadWidth - 100) ||
+          (direction === 'east' && position.x < center.x - roadWidth && position.x > center.x - roadWidth - 100) ||
+          (direction === 'west' && position.x > center.x + roadWidth && position.x < center.x + roadWidth + 100)
+        );
+        
+        // Check if in intersection
+        const inIntersection = (
+          position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
+          position.y > center.y - roadWidth && position.y < center.y + roadWidth
+        );
+        
+        // Check for vehicle ahead
+        const vehicleAhead = prev.find(other => {
+          if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
           
-          ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
-          ctx.beginPath();
-          ctx.arc(x, y - 15, 5, 0, Math.PI * 2);
-          ctx.fill();
+          const distance = direction === 'north' || direction === 'south'
+            ? Math.abs(other.position.y - position.y)
+            : Math.abs(other.position.x - position.x);
+            
+          const otherIsAhead = (
+            (direction === 'north' && other.position.y < position.y) ||
+            (direction === 'south' && other.position.y > position.y) ||
+            (direction === 'east' && other.position.x > position.x) ||
+            (direction === 'west' && other.position.x < position.x)
+          );
           
-          ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
-          ctx.beginPath();
-          ctx.arc(x, y, 5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
-          ctx.beginPath();
-          ctx.arc(x, y + 15, 5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Draw countdown timer or remaining time
-          if (countdown > 0) {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(x - 10, y - 35, 20, 12);
-            ctx.fillStyle = 'white';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${countdown}`, x, y - 26);
-          } else if (state === 'green') {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(x - 10, y - 35, 20, 12);
-            ctx.fillStyle = 'white';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${timeLeft}`, x, y - 26);
+          return otherIsAhead && distance < vehicleLength * 2;
+        });
+        
+        // Update vehicle waiting status and speed
+        if (!canPass && approachingIntersection && !inIntersection) {
+          waiting = true;
+          speed = 0;
+          if (!vehicle.waiting) {
+            waitTimesRef.current.push(0);
           }
-          
-          ctx.strokeStyle = '#111';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x - 7, y - 22, 14, 40);
-          
-          ctx.fillStyle = '#333';
-          ctx.fillRect(x - 2, y + 18, 4, 15);
+        } else if (vehicleAhead) {
+          waiting = true;
+          speed = 0;
         } else {
-          ctx.fillRect(x - 22, y - 7, 40, 14);
-          
-          ctx.fillStyle = state === 'red' ? '#ff3b30' : '#550000';
-          ctx.beginPath();
-          ctx.arc(x - 15, y, 5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.fillStyle = state === 'yellow' ? '#ffcc00' : '#553300';
-          ctx.beginPath();
-          ctx.arc(x, y, 5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.fillStyle = state === 'green' ? '#34c759' : '#005500';
-          ctx.beginPath();
-          ctx.arc(x + 15, y, 5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Draw countdown timer or remaining time
-          if (countdown > 0) {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(x - 35, y - 10, 12, 20);
-            ctx.fillStyle = 'white';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${countdown}`, x - 29, y + 4);
-          } else if (state === 'green') {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(x - 35, y - 10, 12, 20);
-            ctx.fillStyle = 'white';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${timeLeft}`, x - 29, y + 4);
+          if (waiting) {
+            const waitTime = (Date.now() - vehicle.created) / 1000;
+            if (waitTime > 0.5) {
+              waitTimesRef.current[waitTimesRef.current.length - 1] = waitTime;
+            } else {
+              waitTimesRef.current.pop();
+            }
           }
-          
-          ctx.strokeStyle = '#111';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x - 22, y - 7, 40, 14);
-          
-          ctx.fillStyle = '#333';
-          ctx.fillRect(x + 18, y - 2, 15, 4);
-        }
-      };
-      
-      drawTrafficLight(
-        center.x + roadWidth + 20, 
-        center.y - roadWidth - 20, 
-        'vertical', 
-        nsLight.state,
-        nsLight.countdown,
-        nsLight.timeLeft
-      );
-      
-      drawTrafficLight(
-        center.x - roadWidth - 20, 
-        center.y + roadWidth + 20, 
-        'vertical', 
-        nsLight.state,
-        nsLight.countdown,
-        nsLight.timeLeft
-      );
-      
-      drawTrafficLight(
-        center.x + roadWidth + 20, 
-        center.y + roadWidth + 20, 
-        'horizontal', 
-        ewLight.state,
-        ewLight.countdown,
-        ewLight.timeLeft
-      );
-      
-      drawTrafficLight(
-        center.x - roadWidth - 20, 
-        center.y - roadWidth - 20, 
-        'horizontal', 
-        ewLight.state,
-        ewLight.countdown,
-        ewLight.timeLeft
-      );
-      
-      // Draw countdown indicators in the center of the intersection
-      if (nsLight.state === 'green' && nsLight.timeLeft <= 5) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
-        ctx.fillStyle = '#34c759';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${nsLight.timeLeft}`, center.x, center.y - 20);
-        ctx.font = '12px Arial';
-        ctx.fillText('NS', center.x, center.y - 5);
-      } else if (ewLight.state === 'green' && ewLight.timeLeft <= 5) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
-        ctx.fillStyle = '#34c759';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${ewLight.timeLeft}`, center.x, center.y - 20);
-        ctx.font = '12px Arial';
-        ctx.fillText('EW', center.x, center.y - 5);
-      } else if (nsLight.countdown > 0) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
-        ctx.fillStyle = '#ffcc00';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${nsLight.countdown}`, center.x, center.y - 20);
-        ctx.font = '12px Arial';
-        ctx.fillText('NS→', center.x, center.y - 5);
-      } else if (ewLight.countdown > 0) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(center.x - 20, center.y - 45, 40, 40);
-        ctx.fillStyle = '#ffcc00';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${ewLight.countdown}`, center.x, center.y - 20);
-        ctx.font = '12px Arial';
-        ctx.fillText('EW→', center.x, center.y - 5);
-      }
-      
-      if (Math.random() * 100 < density * deltaTime) {
-        const direction = ['north', 'south', 'east', 'west'][Math.floor(Math.random() * 4)] as 'north' | 'south' | 'east' | 'west';
-        const vehicleType = Math.random() > 0.8 
-          ? (Math.random() > 0.5 ? 'truck' : 'bus') 
-          : 'car';
-        
-        const vehicleColors = [
-          '#1A1F2C',
-          '#403E43',
-          '#221F26',
-          '#8E9196',
-          '#4A4A4A',
-          '#555555'
-        ];
-        
-        const lane = Math.floor(Math.random() * 2);
-        let position = { x: 0, y: 0 };
-        const laneOffset = laneWidth * 0.5 + (lane * laneWidth);
-        
-        switch (direction) {
-          case 'north':
-            position = { 
-              x: center.x + laneOffset,
-              y: canvas.height + 20 
-            };
-            break;
-          case 'south':
-            position = { 
-              x: center.x - laneOffset,
-              y: -20 
-            };
-            break;
-          case 'east':
-            position = { 
-              x: -20,
-              y: center.y + laneOffset 
-            };
-            break;
-          case 'west':
-            position = { 
-              x: canvas.width + 20,
-              y: center.y - laneOffset 
-            };
-            break;
+          waiting = false;
+          speed = 40 + Math.random() * 20;
         }
         
-        setVehicles(prev => [...prev, {
-          id: `vehicle-${vehicleCounter.current++}`,
-          type: vehicleType,
-          color: vehicleColors[Math.floor(Math.random() * vehicleColors.length)],
-          direction,
-          position,
-          speed: 40 + Math.random() * 20,
-          waiting: false,
-          created: Date.now(),
-          lane
-        }]);
-      }
-      
-      setVehicles(prev => {
-        return prev.map(vehicle => {
-          let { position, speed, waiting, direction, lane } = vehicle;
-          const vehicleLength = vehicle.type === 'car' ? 15 : vehicle.type === 'truck' ? 25 : 30;
-          const vehicleWidth = vehicle.type === 'car' ? 10 : 12;
-          
-          const canPass = (
-            (direction === 'north' || direction === 'south') && (nsLight.state === 'green' || nsLight.state === 'yellow') ||
-            (direction === 'east' || direction === 'west') && (ewLight.state === 'green' || ewLight.state === 'yellow')
-          );
-          
-          const approachingIntersection = (
-            (direction === 'north' && position.y > center.y + roadWidth && position.y < center.y + roadWidth + 100) ||
-            (direction === 'south' && position.y < center.y - roadWidth && position.y > center.y - roadWidth - 100) ||
-            (direction === 'east' && position.x < center.x - roadWidth && position.x > center.x - roadWidth - 100) ||
-            (direction === 'west' && position.x > center.x + roadWidth && position.x < center.x + roadWidth + 100)
-          );
-          
-          const inIntersection = (
-            position.x > center.x - roadWidth && position.x < center.x + roadWidth &&
-            position.y > center.y - roadWidth && position.y < center.y + roadWidth
-          );
-          
-          const vehicleAhead = prev.find(other => {
-            if (other.id === vehicle.id || other.direction !== vehicle.direction || other.lane !== vehicle.lane) return false;
-            
-            const distance = direction === 'north' || direction === 'south'
-              ? Math.abs(other.position.y - position.y)
-              : Math.abs(other.position.x - position.x);
-              
-            const otherIsAhead = (
-              (direction === 'north' && other.position.y < position.y) ||
-              (direction === 'south' && other.position.y > position.y) ||
-              (direction === 'east' && other.position.x > position.x) ||
-              (direction === 'west' && other.position.x < position.x)
-            );
-            
-            return otherIsAhead && distance < vehicleLength * 2;
-          });
-          
-          if (!canPass && approachingIntersection && !inIntersection) {
-            waiting = true;
-            speed = 0;
-            if (!vehicle.waiting) {
-              waitTimes.current.push(0);
-            }
-          } else if (vehicleAhead) {
-            waiting = true;
-            speed = 0;
-          } else {
-            if (waiting) {
-              const waitTime = (Date.now() - vehicle.created) / 1000;
-              if (waitTime > 0.5) {
-                waitTimes.current[waitTimes.current.length - 1] = waitTime;
-              } else {
-                waitTimes.current.pop();
-              }
-            }
-            waiting = false;
-            speed = 40 + Math.random() * 20;
+        // Update vehicle position
+        if (!waiting) {
+          switch (direction) {
+            case 'north':
+              position.y -= speed * deltaTime;
+              position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
+              break;
+            case 'south':
+              position.y += speed * deltaTime;
+              position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
+              break;
+            case 'east':
+              position.x += speed * deltaTime;
+              position.y = center.y + (laneWidth * 0.5 + (lane * laneWidth));
+              break;
+            case 'west':
+              position.x -= speed * deltaTime;
+              position.y = center.y - (laneWidth * 0.5 + (lane * laneWidth));
+              break;
           }
-          
-          if (!waiting) {
-            switch (direction) {
-              case 'north':
-                position.y -= speed * deltaTime;
-                position.x = center.x + (laneWidth * 0.5 + (lane * laneWidth));
-                break;
-              case 'south':
-                position.y += speed * deltaTime;
-                position.x = center.x - (laneWidth * 0.5 + (lane * laneWidth));
-                break;
-              case 'east':
-                position.x += speed * deltaTime;
-                position.y = center.y + (laneWidth * 0.5 + (lane * laneWidth));
-                break;
-              case 'west':
-                position.x -= speed * deltaTime;
-                position.y = center.y - (laneWidth * 0.5 + (lane * laneWidth));
-                break;
-            }
-          }
-          
-          ctx.save();
-          ctx.translate(position.x, position.y);
-          
-          if (direction === 'north') {
-            ctx.rotate(Math.PI * 0);
-          } else if (direction === 'south') {
-            ctx.rotate(Math.PI * 1);
-          } else if (direction === 'east') {
-            ctx.rotate(Math.PI * 0.5);
-          } else if (direction === 'west') {
-            ctx.rotate(Math.PI * 1.5);
-          }
-          
-          ctx.fillStyle = 'rgba(0,0,0,0.2)';
-          ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, vehicleWidth, vehicleLength);
-          
-          ctx.fillStyle = vehicle.color;
-          ctx.fillRect(-vehicleWidth / 2, -vehicleLength / 2, vehicleWidth, vehicleLength);
-          
-          if (vehicle.type === 'car') {
-            ctx.fillStyle = '#222222';
-            ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 3);
-            ctx.fillRect(-vehicleWidth / 2 + 1, vehicleLength / 2 - 6, vehicleWidth - 2, 3);
-            
-            if (direction === 'north' || direction === 'south' || direction === 'west') {
-              ctx.fillStyle = '#ff3b30';
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
-              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
-            } else {
-              ctx.fillStyle = '#ffcc00';
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
-              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
-            }
-          } else if (vehicle.type === 'truck') {
-            ctx.fillStyle = '#222222';
-            ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 6);
-            
-            ctx.fillStyle = vehicle.color === '#1A1F2C' ? '#262A37' : '#4E4950';
-            ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 10, vehicleWidth - 2, vehicleLength - 13);
-            
-            if (direction === 'north' || direction === 'south' || direction === 'west') {
-              ctx.fillStyle = '#ff3b30';
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
-              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
-            } else {
-              ctx.fillStyle = '#ffcc00';
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
-              ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
-            }
-          } else {
-            ctx.fillStyle = '#222222';
-            for (let i = 0; i < 4; i++) {
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 5 + i * 5, vehicleWidth - 2, 3);
-            }
-            
-            if (direction === 'north' || direction === 'south' || direction === 'west') {
-              ctx.fillStyle = '#ff3b30';
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
-              ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
-            } else {
-              ctx.fillStyle = '#ffcc00';
-              ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
-              ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
-            }
-          }
-          
-          ctx.restore();
-          
-          const outOfBounds = (
-            position.x < -50 || position.x > canvas.width + 50 ||
-            position.y < -50 || position.y > canvas.height + 50
-          );
-          
-          if (outOfBounds) {
-            throughputTimeWindowRef.current.push(Date.now());
-            completedVehiclesRef.current++;
-          }
-          
-          return outOfBounds ? null : { ...vehicle, position, speed, waiting };
-        }).filter(Boolean) as Vehicle[];
-      });
-      
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(center.x - 25, center.y - roadWidth - 40, 50, 20);
-      ctx.fillStyle = 'white';
-      ctx.fillText(`NS: ${nsLight.timeLeft}s`, center.x, center.y - roadWidth - 25);
-      
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(center.x + roadWidth + 20, center.y - 10, 50, 20);
-      ctx.fillStyle = 'white';
-      ctx.fillText(`EW: ${ewLight.timeLeft}s`, center.x + roadWidth + 45, center.y + 5);
-      
-      if (nsLight.countdown > 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(center.x - 25, center.y - roadWidth - 65, 50, 20);
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillText(`Wait: ${nsLight.countdown}s`, center.x, center.y - roadWidth - 50);
-      }
-      
-      if (ewLight.countdown > 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(center.x + roadWidth + 20, center.y - 35, 50, 20);
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillText(`Wait: ${ewLight.countdown}s`, center.x + roadWidth + 45, center.y - 20);
-      }
-      
-      animationRef.current = requestAnimationFrame(animate);
-    };
+        }
+        
+        // Draw the vehicle
+        drawVehicle(ctx, vehicle, vehicleLength, vehicleWidth);
+        
+        // Check if vehicle is out of bounds
+        const outOfBounds = (
+          position.x < -50 || position.x > canvasWidth + 50 ||
+          position.y < -50 || position.y > canvasHeight + 50
+        );
+        
+        if (outOfBounds) {
+          throughputWindowRef.current.push(Date.now());
+          completedVehiclesRef.current++;
+        }
+        
+        return outOfBounds ? null : { ...vehicle, position, speed, waiting };
+      }).filter(Boolean) as Vehicle[];
+    });
+  };
+  
+  // Draw a vehicle
+  const drawVehicle = (ctx: CanvasRenderingContext2D, vehicle: Vehicle, vehicleLength: number, vehicleWidth: number) => {
+    const { position, direction, type, color } = vehicle;
     
-    animationRef.current = requestAnimationFrame(animate);
+    ctx.save();
+    ctx.translate(position.x, position.y);
     
-    return () => cancelAnimationFrame(animationRef.current);
-  }, [isRunning, optimizationEnabled, algorithmType]);
+    // Rotate based on direction
+    if (direction === 'north') {
+      ctx.rotate(Math.PI * 0);
+    } else if (direction === 'south') {
+      ctx.rotate(Math.PI * 1);
+    } else if (direction === 'east') {
+      ctx.rotate(Math.PI * 0.5);
+    } else if (direction === 'west') {
+      ctx.rotate(Math.PI * 1.5);
+    }
+    
+    // Draw shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, vehicleWidth, vehicleLength);
+    
+    // Draw vehicle body
+    ctx.fillStyle = color;
+    ctx.fillRect(-vehicleWidth / 2, -vehicleLength / 2, vehicleWidth, vehicleLength);
+    
+    // Draw vehicle details based on type
+    if (type === 'car') {
+      ctx.fillStyle = '#222222';
+      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 3);
+      ctx.fillRect(-vehicleWidth / 2 + 1, vehicleLength / 2 - 6, vehicleWidth - 2, 3);
+      
+      // Draw lights
+      if (direction === 'north' || direction === 'south' || direction === 'west') {
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
+      } else {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 1);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 1);
+      }
+    } else if (type === 'truck') {
+      ctx.fillStyle = '#222222';
+      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 3, vehicleWidth - 2, 6);
+      
+      ctx.fillStyle = color === '#1A1F2C' ? '#262A37' : '#4E4950';
+      ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 10, vehicleWidth - 2, vehicleLength - 13);
+      
+      // Draw lights
+      if (direction === 'north' || direction === 'south' || direction === 'west') {
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
+      } else {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 2, 2);
+        ctx.fillRect(vehicleWidth / 2 - 3, -vehicleLength / 2 + 1, 2, 2);
+      }
+    } else { // Bus
+      ctx.fillStyle = '#222222';
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 5 + i * 5, vehicleWidth - 2, 3);
+      }
+      
+      // Draw lights
+      if (direction === 'north' || direction === 'south' || direction === 'west') {
+        ctx.fillStyle = '#ff3b30';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
+        ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
+      } else {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-vehicleWidth / 2 + 1, -vehicleLength / 2 + 1, 3, 2);
+        ctx.fillRect(vehicleWidth / 2 - 4, -vehicleLength / 2 + 1, 3, 2);
+      }
+    }
+    
+    ctx.restore();
+  };
+  
+  // Draw stats overlay
+  const drawStatsOverlay = (
+    ctx: CanvasRenderingContext2D, 
+    canvasWidth: number, 
+    canvasHeight: number, 
+    nsLight: TrafficLight, 
+    ewLight: TrafficLight
+  ) => {
+    const center = { x: canvasWidth / 2, y: canvasHeight / 2 };
+    const roadWidth = 60;
+    
+    // Draw light timing info
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(center.x - 25, center.y - roadWidth - 40, 50, 20);
+    ctx.fillStyle = 'white';
+    ctx.fillText(`NS: ${nsLight.timeLeft}s`, center.x, center.y - roadWidth - 25);
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(center.x + roadWidth + 20, center.y - 10, 50, 20);
+    ctx.fillStyle = 'white';
+    ctx.fillText(`EW: ${ewLight.timeLeft}s`, center.x + roadWidth + 45, center.y + 5);
+    
+    if (nsLight.countdown > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(center.x - 25, center.y - roadWidth - 65, 50, 20);
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillText(`Wait: ${nsLight.countdown}s`, center.x, center.y - roadWidth - 50);
+    }
+    
+    if (ewLight.countdown > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(center.x + roadWidth + 20, center.y - 35, 50, 20);
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillText(`Wait: ${ewLight.countdown}s`, center.x + roadWidth + 45, center.y - 20);
+    }
+  };
   
   return (
     <section id="simulation" className="section-container py-20">
